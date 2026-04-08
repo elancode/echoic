@@ -61,3 +61,4 @@ credentials.*
 # Temporary files
 *.tmp
 *.log
+default.profraw
