@@ -1,0 +1,69 @@
+name: Echoic
+options:
+  bundleIdPrefix: com.echoic
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    from: "0.9.0"
+
+targets:
+  Echoic:
+    type: application
+    platform: macOS
+    sources:
+      - path: Echoic
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.echoic.app
+        INFOPLIST_FILE: Echoic/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Echoic/Resources/Echoic.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: true
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: HN2BGT46R6
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: GRDB
+        product: GRDB
+      - package: Sparkle
+      - package: WhisperKit
+        product: WhisperKit
+      - package: WhisperKit
+        product: SpeakerKit
+      - sdk: ScreenCaptureKit.framework
+      - sdk: AVFoundation.framework
+      - sdk: Security.framework
+
+  EchoicTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: EchoicTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.echoic.app.tests
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: HN2BGT46R6
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - target: Echoic
+      - package: GRDB
+        product: GRDB

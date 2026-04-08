@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-dangerous.sh \"$input.command\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-format.sh \"$input.file_path\""
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-edit-quality.sh \"$input.file_path\""
+          }
+        ]
+      }
+    ]
+  }
+}
