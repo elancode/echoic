@@ -125,7 +125,7 @@ final class AACEncoder {
         var asbd = AudioStreamBasicDescription(
             mSampleRate: sampleRate,
             mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsNonInterleaved,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
             mBytesPerPacket: UInt32(bytesPerFrame),
             mFramesPerPacket: 1,
             mBytesPerFrame: UInt32(bytesPerFrame),

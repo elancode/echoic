@@ -130,14 +130,13 @@ private struct ScreenRecordingStep: View {
                 Label("Permission granted", systemImage: "checkmark.circle.fill")
                     .foregroundColor(.green)
             } else {
-                Button("Grant Permission") {
-                    AudioCaptureService.requestScreenCapturePermission()
+                Button("Open System Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
                 .buttonStyle(.bordered)
             }
-        }
-        .task {
-            hasPermission = await AudioCaptureService.checkScreenCapturePermission()
         }
     }
 }

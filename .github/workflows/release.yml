@@ -21,6 +21,12 @@ jobs:
       - name: Install tools
         run: brew install xcodegen create-dmg
 
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Echoic/Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Echoic/Resources/Info.plist
+
       - name: Generate Xcode project
         run: xcodegen generate
 

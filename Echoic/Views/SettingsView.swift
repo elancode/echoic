@@ -168,8 +168,6 @@ struct AudioSettingsTab: View {
     @AppStorage("enableMicrophone") private var enableMicrophone = false
     @State private var inputDevices: [(id: AudioDeviceID, name: String)] = []
     @State private var selectedDevice: AudioDeviceID?
-    @State private var hasScreenRecording = AudioCaptureService.hasScreenCapturePermission()
-
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
@@ -179,17 +177,12 @@ struct AudioSettingsTab: View {
                 HStack {
                     Text("Screen Recording")
                     Spacer()
-                    if hasScreenRecording {
-                        Label("Granted", systemImage: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                    } else {
-                        Button("Open System Settings") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                                NSWorkspace.shared.open(url)
-                            }
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                            NSWorkspace.shared.open(url)
                         }
-                        .controlSize(.small)
                     }
+                    .controlSize(.small)
                 }
 
                 Text("Required for capturing system audio. No video or screen content is captured.")
@@ -223,8 +216,7 @@ struct AudioSettingsTab: View {
             Spacer()
         }
         .padding(20)
-        .task {
-            hasScreenRecording = await AudioCaptureService.checkScreenCapturePermission()
+        .onAppear {
             inputDevices = MicrophoneCaptureService.availableInputDevices()
         }
     }
