@@ -91,13 +91,38 @@ final class AudioCaptureService: NSObject {
         ringBuffer.reset()
     }
 
-    /// Checks if Screen Recording permission is granted.
+    /// Checks if Screen Recording permission is granted by actually querying ScreenCaptureKit.
+    /// CGPreflightScreenCaptureAccess() is unreliable, so we test the real API.
     static func hasScreenCapturePermission() -> Bool {
-        CGPreflightScreenCaptureAccess()
+        // Fast path: if CGPreflight says yes, it's definitely granted
+        if CGPreflightScreenCaptureAccess() {
+            return true
+        }
+        // Slow path: CGPreflight can return false even when granted,
+        // so try the actual API. Use a cached result to avoid repeated async calls.
+        return _cachedPermissionResult
     }
 
-    /// Requests Screen Recording permission.
-    static func requestScreenCapturePermission() -> Bool {
+    private static var _cachedPermissionResult = false
+
+    /// Performs an async check of screen capture permission and caches the result.
+    static func checkScreenCapturePermission() async -> Bool {
+        if CGPreflightScreenCaptureAccess() {
+            _cachedPermissionResult = true
+            return true
+        }
+        do {
+            _ = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            _cachedPermissionResult = true
+            return true
+        } catch {
+            _cachedPermissionResult = false
+            return false
+        }
+    }
+
+    /// Requests Screen Recording permission (opens System Settings prompt).
+    static func requestScreenCapturePermission() {
         CGRequestScreenCaptureAccess()
     }
 }

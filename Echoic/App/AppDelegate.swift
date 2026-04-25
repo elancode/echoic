@@ -7,9 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon — menu bar only
         NSApp.setActivationPolicy(.accessory)
 
-        // Request screen capture access so the app appears in System Settings
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
+        // Warm up the screen capture permission cache (async, non-blocking).
+        // Do NOT call CGRequestScreenCaptureAccess() here — it shows a dialog
+        // every launch if CGPreflightScreenCaptureAccess() is unreliable.
+        Task {
+            await AudioCaptureService.checkScreenCapturePermission()
         }
 
         // Stop recording gracefully when the system sleeps (e.g. laptop lid close)

@@ -161,6 +161,7 @@ struct AudioSettingsTab: View {
     @AppStorage("enableMicrophone") private var enableMicrophone = false
     @State private var inputDevices: [(id: AudioDeviceID, name: String)] = []
     @State private var selectedDevice: AudioDeviceID?
+    @State private var hasScreenRecording = AudioCaptureService.hasScreenCapturePermission()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -171,13 +172,11 @@ struct AudioSettingsTab: View {
                 HStack {
                     Text("Screen Recording")
                     Spacer()
-                    if AudioCaptureService.hasScreenCapturePermission() {
+                    if hasScreenRecording {
                         Label("Granted", systemImage: "checkmark.circle.fill")
                             .foregroundColor(.green)
                     } else {
                         Button("Open System Settings") {
-                            _ = AudioCaptureService.requestScreenCapturePermission()
-                            // Also open System Settings directly as fallback
                             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
                                 NSWorkspace.shared.open(url)
                             }
@@ -217,7 +216,8 @@ struct AudioSettingsTab: View {
             Spacer()
         }
         .padding(20)
-        .onAppear {
+        .task {
+            hasScreenRecording = await AudioCaptureService.checkScreenCapturePermission()
             inputDevices = MicrophoneCaptureService.availableInputDevices()
         }
     }

@@ -131,14 +131,13 @@ private struct ScreenRecordingStep: View {
                     .foregroundColor(.green)
             } else {
                 Button("Grant Permission") {
-                    _ = AudioCaptureService.requestScreenCapturePermission()
-                    // Re-check after a moment
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        hasPermission = AudioCaptureService.hasScreenCapturePermission()
-                    }
+                    AudioCaptureService.requestScreenCapturePermission()
                 }
                 .buttonStyle(.bordered)
             }
+        }
+        .task {
+            hasPermission = await AudioCaptureService.checkScreenCapturePermission()
         }
     }
 }
