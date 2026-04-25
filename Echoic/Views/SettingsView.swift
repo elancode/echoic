@@ -59,6 +59,13 @@ struct GeneralSettingsTab: View {
             }
 
             Spacer()
+
+            HStack {
+                Spacer()
+                Text("Echoic \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(20)
     }

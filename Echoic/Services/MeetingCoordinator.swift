@@ -43,6 +43,17 @@ final class MeetingCoordinator: ObservableObject {
         }
 
         do {
+            // Check screen capture permission before doing anything.
+            // Don't use CGRequestScreenCaptureAccess() — it triggers a system
+            // dialog that can restart the app in a loop.
+            if recordingMode == .systemAudio {
+                let hasPermission = await AudioCaptureService.checkScreenCapturePermission()
+                if !hasPermission {
+                    state = .error("Screen Recording permission is required. Open System Settings → Privacy & Security → Screen & System Audio Recording, and enable Echoic.")
+                    return
+                }
+            }
+
             let meeting = Meeting.create()
             enableMicrophone = enableMic || recordingMode == .microphone
 
