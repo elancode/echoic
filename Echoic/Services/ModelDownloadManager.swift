@@ -1,4 +1,5 @@
 import Foundation
+import WhisperKit
 
 /// Downloads and manages WhisperKit CoreML model bundles.
 final class ModelDownloadManager: ObservableObject {
@@ -12,7 +13,8 @@ final class ModelDownloadManager: ObservableObject {
         let name: String
         let displayName: String
         let sizeBytes: Int64
-        let url: String
+        /// WhisperKit model variant string (e.g. "large-v3").
+        let variant: String
     }
 
     /// Standard models available for download.
@@ -21,7 +23,7 @@ final class ModelDownloadManager: ObservableObject {
             name: "openai_whisper-large-v3",
             displayName: "Large v3 (Multilingual) — ~600 MB",
             sizeBytes: 600_000_000,
-            url: "https://huggingface.co/argmaxinc/whisperkit-coreml/resolve/main/openai_whisper-large-v3"
+            variant: "large-v3"
         )
     ]
 
@@ -38,7 +40,7 @@ final class ModelDownloadManager: ObservableObject {
             .appendingPathComponent("models", isDirectory: true)
     }
 
-    /// Downloads a model.
+    /// Downloads a model using WhisperKit's built-in HuggingFace download.
     func download(_ model: ModelInfo) async throws {
         guard !isDownloading else { return }
 
@@ -55,21 +57,14 @@ final class ModelDownloadManager: ObservableObject {
 
         try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
 
-        let destinationDir = modelsDirectory.appendingPathComponent(model.name, isDirectory: true)
-
-        guard let url = URL(string: model.url) else { return }
-
-        let (tempURL, _) = try await URLSession.shared.download(from: url, delegate: DownloadDelegate { [weak self] progress in
+        _ = try await WhisperKit.download(
+            variant: model.variant,
+            downloadBase: modelsDirectory
+        ) { [weak self] progress in
             Task { @MainActor in
-                self?.downloadProgress = progress
+                self?.downloadProgress = progress.fractionCompleted
             }
-        })
-
-        // Move to final location
-        if FileManager.default.fileExists(atPath: destinationDir.path) {
-            try FileManager.default.removeItem(at: destinationDir)
         }
-        try FileManager.default.moveItem(at: tempURL, to: destinationDir)
 
         await MainActor.run {
             downloadProgress = 1.0
@@ -79,54 +74,47 @@ final class ModelDownloadManager: ObservableObject {
 
     /// Deletes a downloaded model.
     func delete(_ model: ModelInfo) throws {
-        let path = modelsDirectory.appendingPathComponent(model.name)
-        if FileManager.default.fileExists(atPath: path.path) {
-            try FileManager.default.removeItem(at: path)
+        let fm = FileManager.default
+        // WhisperKit may add version suffixes to the folder name
+        if let match = findModelFolder(named: model.name) {
+            try fm.removeItem(at: match)
         }
         refreshDownloadedModels()
     }
 
     /// Checks which models are downloaded in the app's models directory.
     func refreshDownloadedModels() {
-        let fm = FileManager.default
-
         downloadedModels = availableModels.filter { model in
-            let appPath = modelsDirectory.appendingPathComponent(model.name)
-            var isDir: ObjCBool = false
-            return fm.fileExists(atPath: appPath.path, isDirectory: &isDir) && isDir.boolValue
+            findModelFolder(named: model.name) != nil
         }
     }
 
     /// Returns the path to the best available model.
     func bestAvailableModelPath() -> String? {
         let preferred = ["openai_whisper-large-v3"]
-        let fm = FileManager.default
 
         for name in preferred {
-            let path = modelsDirectory.appendingPathComponent(name)
-            var isDir: ObjCBool = false
-            if fm.fileExists(atPath: path.path, isDirectory: &isDir), isDir.boolValue {
-                return path.path
+            if let match = findModelFolder(named: name) {
+                return match.path
             }
         }
 
         return nil
     }
-}
 
-// MARK: - Download Delegate
-
-private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
-    let progressHandler: (Double) -> Void
-
-    init(progressHandler: @escaping (Double) -> Void) {
-        self.progressHandler = progressHandler
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0 else { return }
-        progressHandler(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    /// Finds a model folder by name prefix (WhisperKit may append version suffixes).
+    private func findModelFolder(named prefix: String) -> URL? {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(atPath: modelsDirectory.path) else {
+            return nil
+        }
+        if let match = contents.first(where: { $0.hasPrefix(prefix) }) {
+            let url = modelsDirectory.appendingPathComponent(match)
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                return url
+            }
+        }
+        return nil
     }
 }
