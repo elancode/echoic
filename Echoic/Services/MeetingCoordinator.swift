@@ -112,13 +112,9 @@ final class MeetingCoordinator: ObservableObject {
                 try? await audioCaptureService.stopCapture()
             }
 
-            let message: String
             let nsError = error as NSError
-            if nsError.domain == "com.apple.screencapturekit.error" || nsError.code == -3801 {
-                message = "Screen Recording permission is required. Open System Settings → Privacy & Security → Screen & System Audio Recording, and enable Echoic."
-            } else {
-                message = error.localizedDescription
-            }
+            logger.error("Recording failed: \(nsError.domain) code=\(nsError.code) \(error.localizedDescription)")
+            let message = error.localizedDescription
             state = .error(message)
             errorMessage = message
         }
