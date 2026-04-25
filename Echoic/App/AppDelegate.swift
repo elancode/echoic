@@ -11,6 +11,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
         }
+
+        // Stop recording gracefully when the system sleeps (e.g. laptop lid close)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleSleep(_ notification: Notification) {
+        let coordinator = MeetingCoordinator.shared
+        guard coordinator.state == .recording else { return }
+
+        Task { @MainActor in
+            await coordinator.stopRecording()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

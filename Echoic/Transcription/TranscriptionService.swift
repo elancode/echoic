@@ -20,9 +20,11 @@ final class TranscriptionService {
     /// Initializes WhisperKit with the given model variant.
     /// - Parameter model: Model name (e.g. "small.en", "large-v3"). If nil, uses default.
     func initialize(model: String? = nil) async throws {
+        let modelsDir = ModelDownloadManager().modelsDirectory.path
         let config = WhisperKitConfig(
             model: model,
             download: true,
+            modelFolder: modelsDir,
             useBackgroundDownloadSession: false
         )
         config.verbose = false

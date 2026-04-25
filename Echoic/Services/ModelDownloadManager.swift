@@ -86,51 +86,27 @@ final class ModelDownloadManager: ObservableObject {
         refreshDownloadedModels()
     }
 
-    /// Checks which models are downloaded (app directory + WhisperKit default location).
+    /// Checks which models are downloaded in the app's models directory.
     func refreshDownloadedModels() {
         let fm = FileManager.default
-        let whisperKitDir = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/huggingface/models/argmaxinc/whisperkit-coreml")
-        let whisperKitContents = (try? fm.contentsOfDirectory(atPath: whisperKitDir.path)) ?? []
 
         downloadedModels = availableModels.filter { model in
-            // Check app's own models directory
             let appPath = modelsDirectory.appendingPathComponent(model.name)
             var isDir: ObjCBool = false
-            if fm.fileExists(atPath: appPath.path, isDirectory: &isDir), isDir.boolValue {
-                return true
-            }
-            // Check WhisperKit's default download location (with version suffixes)
-            return whisperKitContents.contains { $0.hasPrefix(model.name) }
+            return fm.fileExists(atPath: appPath.path, isDirectory: &isDir) && isDir.boolValue
         }
     }
 
-    /// Returns the path to the best available model (prefers small.en).
-    /// Checks both the app's models directory and WhisperKit's default download location.
+    /// Returns the path to the best available model.
     func bestAvailableModelPath() -> String? {
         let preferred = ["openai_whisper-large-v3"]
         let fm = FileManager.default
 
-        // Check app's own models directory (must be a directory, not a stale file)
         for name in preferred {
             let path = modelsDirectory.appendingPathComponent(name)
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: path.path, isDirectory: &isDir), isDir.boolValue {
                 return path.path
-            }
-        }
-
-        // Check WhisperKit's default download location (~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/)
-        let whisperKitDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/huggingface/models/argmaxinc/whisperkit-coreml")
-        if fm.fileExists(atPath: whisperKitDir.path),
-           let contents = try? fm.contentsOfDirectory(atPath: whisperKitDir.path) {
-            // Match preferred models, allowing version suffixes (e.g. openai_whisper-large-v3-v20240930)
-            for name in preferred {
-                if let match = contents.first(where: { $0.hasPrefix(name) }) {
-                    let path = whisperKitDir.appendingPathComponent(match)
-                    return path.path
-                }
             }
         }
 
