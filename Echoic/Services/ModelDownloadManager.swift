@@ -21,8 +21,8 @@ final class ModelDownloadManager: ObservableObject {
     static let defaultModels: [ModelInfo] = [
         ModelInfo(
             name: "openai_whisper-large-v3",
-            displayName: "Large v3 (Multilingual) — ~600 MB",
-            sizeBytes: 600_000_000,
+            displayName: "Large v3 (Multilingual) — ~1.3 GB",
+            sizeBytes: 1_300_000_000,
             variant: "large-v3"
         )
     ]
@@ -32,12 +32,19 @@ final class ModelDownloadManager: ObservableObject {
         refreshDownloadedModels()
     }
 
-    /// Directory where models are stored.
-    var modelsDirectory: URL {
+    /// Echoic's base application support directory.
+    /// WhisperKit creates `models/argmaxinc/whisperkit-coreml/<variant>/` under this.
+    var baseDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return appSupport
-            .appendingPathComponent("Echoic", isDirectory: true)
+        return appSupport.appendingPathComponent("Echoic", isDirectory: true)
+    }
+
+    /// Directory where WhisperKit stores downloaded models.
+    var modelsDirectory: URL {
+        baseDirectory
             .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("argmaxinc", isDirectory: true)
+            .appendingPathComponent("whisperkit-coreml", isDirectory: true)
     }
 
     /// Downloads a model using WhisperKit's built-in HuggingFace download.
@@ -55,11 +62,9 @@ final class ModelDownloadManager: ObservableObject {
             }
         }
 
-        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
-
         _ = try await WhisperKit.download(
             variant: model.variant,
-            downloadBase: modelsDirectory
+            downloadBase: baseDirectory
         ) { [weak self] progress in
             Task { @MainActor in
                 self?.downloadProgress = progress.fractionCompleted
@@ -74,15 +79,13 @@ final class ModelDownloadManager: ObservableObject {
 
     /// Deletes a downloaded model.
     func delete(_ model: ModelInfo) throws {
-        let fm = FileManager.default
-        // WhisperKit may add version suffixes to the folder name
         if let match = findModelFolder(named: model.name) {
-            try fm.removeItem(at: match)
+            try FileManager.default.removeItem(at: match)
         }
         refreshDownloadedModels()
     }
 
-    /// Checks which models are downloaded in the app's models directory.
+    /// Checks which models are downloaded.
     func refreshDownloadedModels() {
         downloadedModels = availableModels.filter { model in
             findModelFolder(named: model.name) != nil
