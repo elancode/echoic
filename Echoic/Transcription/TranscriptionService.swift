@@ -23,8 +23,8 @@ final class TranscriptionService {
         let modelsDir = ModelDownloadManager().modelsDirectory.path
         let config = WhisperKitConfig(
             model: model,
-            download: true,
             modelFolder: modelsDir,
+            download: true,
             useBackgroundDownloadSession: false
         )
         config.verbose = false

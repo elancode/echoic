@@ -22,10 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleSleep(_ notification: Notification) {
-        let coordinator = MeetingCoordinator.shared
-        guard coordinator.state == .recording else { return }
-
         Task { @MainActor in
+            let coordinator = MeetingCoordinator.shared
+            guard coordinator.state == .recording else { return }
             await coordinator.stopRecording()
         }
     }
