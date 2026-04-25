@@ -32,6 +32,13 @@ final class ModelDownloadManager: ObservableObject {
         refreshDownloadedModels()
     }
 
+    /// Removes stale HuggingFace download cache that can cause
+    /// "Invalid metadata: Could not remove corrupted metadata file" errors.
+    func cleanCache() {
+        let cacheDir = modelsDirectory.appendingPathComponent(".cache")
+        try? FileManager.default.removeItem(at: cacheDir)
+    }
+
     /// Echoic's base application support directory.
     /// WhisperKit creates `models/argmaxinc/whisperkit-coreml/<variant>/` under this.
     var baseDirectory: URL {

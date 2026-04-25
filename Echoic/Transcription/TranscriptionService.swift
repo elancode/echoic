@@ -20,6 +20,9 @@ final class TranscriptionService {
     /// Initializes WhisperKit with the given model variant.
     /// - Parameter model: Model name (e.g. "small.en", "large-v3"). If nil, uses default.
     func initialize(model: String? = nil) async throws {
+        // Clean stale HuggingFace cache to prevent "Invalid metadata" errors
+        ModelDownloadManager().cleanCache()
+
         let baseDir = ModelDownloadManager().baseDirectory
         let config = WhisperKitConfig(
             model: model,
@@ -33,6 +36,8 @@ final class TranscriptionService {
 
     /// Initializes WhisperKit from a pre-downloaded model folder.
     func initialize(modelFolder: String) async throws {
+        ModelDownloadManager().cleanCache()
+
         let config = WhisperKitConfig(
             modelFolder: modelFolder,
             download: false,

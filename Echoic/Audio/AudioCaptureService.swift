@@ -27,7 +27,15 @@ final class AudioCaptureService: NSObject {
     func startCapture(meetingId: String) async throws {
         guard !isCapturing else { return }
 
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+        } catch {
+            // SCShareableContent throws when Screen Recording permission is missing or stale.
+            // After app updates, macOS may invalidate the old TCC entry even if it appears
+            // enabled in System Settings. The user needs to toggle it off and back on.
+            throw AudioCaptureError.permissionNotGranted
+        }
 
         guard let display = content.displays.first else {
             throw AudioCaptureError.noDisplayFound
@@ -56,7 +64,14 @@ final class AudioCaptureService: NSObject {
         let stream = SCStream(filter: filter, configuration: config, delegate: nil)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
 
-        try await stream.startCapture()
+        do {
+            try await stream.startCapture()
+        } catch {
+            // Clean up encoder since capture failed
+            self.encoder = nil
+            self.currentMeetingId = nil
+            throw AudioCaptureError.permissionNotGranted
+        }
 
         self.stream = stream
         isCapturing = true
@@ -162,7 +177,7 @@ enum AudioCaptureError: Error, LocalizedError {
         case .permissionDenied:
             return "Screen Recording permission was denied."
         case .permissionNotGranted:
-            return "Screen Recording permission is required. Open System Settings → Privacy & Security → Screen Recording, and enable Echoic."
+            return "Screen Recording permission is required. Open System Settings → Privacy & Security → Screen Recording. If Echoic is already enabled, toggle it off and back on, then relaunch Echoic."
         }
     }
 }
