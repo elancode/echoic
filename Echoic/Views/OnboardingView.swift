@@ -110,8 +110,6 @@ private struct WelcomeStep: View {
 }
 
 private struct ScreenRecordingStep: View {
-    @State private var hasPermission = AudioCaptureService.hasScreenCapturePermission()
-
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "rectangle.inset.filled.and.person.filled")
@@ -126,17 +124,16 @@ private struct ScreenRecordingStep: View {
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
 
-            if hasPermission {
-                Label("Permission granted", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-            } else {
-                Button("Open System Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                        NSWorkspace.shared.open(url)
-                    }
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
                 }
-                .buttonStyle(.bordered)
             }
+            .buttonStyle(.bordered)
+
+            Text("After enabling the permission, you may need to restart Echoic.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 }

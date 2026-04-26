@@ -106,12 +106,6 @@ final class AudioCaptureService: NSObject {
         ringBuffer.reset()
     }
 
-    /// Checks if Screen Recording permission is granted.
-    /// Note: CGPreflightScreenCaptureAccess() is unreliable on some macOS versions.
-    /// The definitive test is attempting to start capture.
-    static func hasScreenCapturePermission() -> Bool {
-        CGPreflightScreenCaptureAccess()
-    }
 }
 
 // MARK: - SCStreamOutput

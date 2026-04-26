@@ -19,7 +19,7 @@ final class MeetingCoordinator: ObservableObject {
     @Published var errorMessage: String?
     @Published var recordingMode: RecordingMode = .systemAudio
 
-    private let audioCaptureService = AudioCaptureService()
+    private lazy var audioCaptureService = AudioCaptureService()
     private let micCaptureService = MicrophoneCaptureService()
     private let transcriptionService = TranscriptionService()
     private let diarizationService = DiarizationService()
