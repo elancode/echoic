@@ -27,13 +27,18 @@ final class AudioCaptureService: NSObject {
     func startCapture(meetingId: String) async throws {
         guard !isCapturing else { return }
 
+        // Pre-check permission BEFORE calling SCShareableContent. Without this,
+        // SCShareableContent triggers a system dialog that restarts the app when
+        // the user toggles the permission in System Settings, creating a loop.
+        // CGPreflightScreenCaptureAccess() is a read-only check — no dialog.
+        guard CGPreflightScreenCaptureAccess() else {
+            throw AudioCaptureError.permissionNotGranted
+        }
+
         let content: SCShareableContent
         do {
             content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         } catch {
-            // SCShareableContent throws when Screen Recording permission is missing or stale.
-            // After app updates, macOS may invalidate the old TCC entry even if it appears
-            // enabled in System Settings. The user needs to toggle it off and back on.
             throw AudioCaptureError.permissionNotGranted
         }
 

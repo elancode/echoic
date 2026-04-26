@@ -124,6 +124,44 @@ final class ModelDownloadManagerTests: XCTestCase {
                        "Should prefer small.en over large-v3")
     }
 
+    // MARK: - cleanCache
+
+    func testCleanCacheRemovesCacheDirectory() {
+        let fm = FileManager.default
+        let manager = ModelDownloadManager()
+
+        // Create a fake .cache directory in the real models location
+        let cacheDir = manager.modelsDirectory.appendingPathComponent(".cache")
+        let innerDir = cacheDir
+            .appendingPathComponent("huggingface")
+            .appendingPathComponent("download")
+        try? fm.createDirectory(at: innerDir, withIntermediateDirectories: true)
+
+        // Create a fake metadata file that causes the "Invalid metadata" error
+        let metadata = innerDir.appendingPathComponent("config.json.metadata")
+        fm.createFile(atPath: metadata.path, contents: "corrupt".data(using: .utf8))
+
+        XCTAssertTrue(fm.fileExists(atPath: cacheDir.path), ".cache should exist before cleanup")
+
+        manager.cleanCache()
+
+        XCTAssertFalse(fm.fileExists(atPath: cacheDir.path), ".cache should be removed after cleanup")
+    }
+
+    func testCleanCacheNoOpWhenNoCacheExists() {
+        let manager = ModelDownloadManager()
+        let cacheDir = manager.modelsDirectory.appendingPathComponent(".cache")
+
+        // Ensure no cache exists
+        try? FileManager.default.removeItem(at: cacheDir)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cacheDir.path))
+
+        // Should not throw or crash
+        manager.cleanCache()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cacheDir.path))
+    }
+
     // MARK: - refreshDownloadedModels
 
     func testRefreshDownloadedModelsFiltersAvailable() {

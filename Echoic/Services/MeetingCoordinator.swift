@@ -84,23 +84,29 @@ final class MeetingCoordinator: ObservableObject {
                 }
             }
 
-            // Start transcription (if Apple Silicon)
+            // Start transcription (if Apple Silicon).
+            // Non-fatal: recording continues even if transcription fails.
+            // Batch transcription can recover the transcript after the meeting.
             if IntelFallback.supportsRealTimeTranscription {
-                let modelManager = ModelDownloadManager()
-                if let modelPath = modelManager.bestAvailableModelPath() {
-                    try await transcriptionService.initialize(modelFolder: modelPath)
-                } else {
-                    try await transcriptionService.initialize()
-                }
-                transcriptionService.onSegment = { [weak self] segment in
-                    Task { @MainActor in
-                        self?.handleNewSegment(segment)
+                do {
+                    let modelManager = ModelDownloadManager()
+                    if let modelPath = modelManager.bestAvailableModelPath() {
+                        try await transcriptionService.initialize(modelFolder: modelPath)
+                    } else {
+                        try await transcriptionService.initialize()
                     }
+                    transcriptionService.onSegment = { [weak self] segment in
+                        Task { @MainActor in
+                            self?.handleNewSegment(segment)
+                        }
+                    }
+                    transcriptionService.startTranscription(
+                        meetingId: meeting.id,
+                        ringBuffer: transcriptionRingBuffer
+                    )
+                } catch {
+                    logger.error("Transcription init failed (non-fatal): \(error.localizedDescription)")
                 }
-                transcriptionService.startTranscription(
-                    meetingId: meeting.id,
-                    ringBuffer: transcriptionRingBuffer
-                )
             }
         } catch {
             // Clean up any capture services that may have started before the error
