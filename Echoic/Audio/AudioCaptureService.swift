@@ -27,14 +27,9 @@ final class AudioCaptureService: NSObject {
     func startCapture(meetingId: String) async throws {
         guard !isCapturing else { return }
 
-        // Pre-check permission BEFORE calling SCShareableContent. Without this,
-        // SCShareableContent triggers a system dialog that restarts the app when
-        // the user toggles the permission in System Settings, creating a loop.
-        // CGPreflightScreenCaptureAccess() is a read-only check — no dialog.
-        guard CGPreflightScreenCaptureAccess() else {
-            throw AudioCaptureError.permissionNotGranted
-        }
-
+        // Do NOT use CGPreflightScreenCaptureAccess() as a gate — it is unreliable
+        // and returns false even when permission IS granted, blocking valid recordings.
+        // Just try SCShareableContent directly; if permission is missing, it throws.
         let content: SCShareableContent
         do {
             content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)

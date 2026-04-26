@@ -106,6 +106,7 @@ final class MeetingCoordinator: ObservableObject {
                     )
                 } catch {
                     logger.error("Transcription init failed (non-fatal): \(error.localizedDescription)")
+                    errorMessage = "Live transcription unavailable: \(error.localizedDescription)"
                 }
             }
         } catch {

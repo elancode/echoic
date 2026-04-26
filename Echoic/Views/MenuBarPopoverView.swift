@@ -38,6 +38,21 @@ struct MenuBarPopoverView: View {
                 .padding(.vertical, 6)
 
                 Divider()
+            } else if coordinator.state == .recording, let warning = coordinator.errorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 10))
+                        .foregroundColor(.yellow)
+                    Text(warning)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
+
+                Divider()
             }
 
             // Source picker (only when not recording)
