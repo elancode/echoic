@@ -1,5 +1,8 @@
 import Foundation
+import os.log
 import WhisperKit
+
+private let logger = Logger(subsystem: "com.echoic.app", category: "Transcription")
 
 /// Manages real-time transcription using WhisperKit.
 /// Processes 10-second chunks with 2-second overlap, deduplicates by timestamp.
@@ -20,13 +23,19 @@ final class TranscriptionService {
     /// Initializes WhisperKit with the given model variant.
     /// - Parameter model: Model name (e.g. "small.en", "large-v3"). If nil, uses default.
     func initialize(model: String? = nil) async throws {
-        // Clean stale HuggingFace cache to prevent "Invalid metadata" errors
-        ModelDownloadManager().cleanCache()
+        let manager = ModelDownloadManager()
+        manager.cleanCache()
 
-        let baseDir = ModelDownloadManager().baseDirectory
+        // Ensure tokenizer_config.json exists for all downloaded models
+        if let modelPath = manager.bestAvailableModelPath() {
+            await manager.ensureTokenizerConfig(in: URL(fileURLWithPath: modelPath))
+        }
+
+        let baseDir = manager.baseDirectory
         let config = WhisperKitConfig(
             model: model,
             downloadBase: baseDir,
+            tokenizerFolder: baseDir,
             download: true,
             useBackgroundDownloadSession: false
         )
@@ -36,10 +45,20 @@ final class TranscriptionService {
 
     /// Initializes WhisperKit from a pre-downloaded model folder.
     func initialize(modelFolder: String) async throws {
-        ModelDownloadManager().cleanCache()
+        let manager = ModelDownloadManager()
+        manager.cleanCache()
 
+        // Ensure tokenizer_config.json exists — WhisperKit's tokenizer loader
+        // requires it to avoid falling through to a buggy HuggingFace Hub download.
+        let modelURL = URL(fileURLWithPath: modelFolder)
+        await manager.ensureTokenizerConfig(in: modelURL)
+
+        // Set tokenizerFolder to our model directory so WhisperKit doesn't fall back
+        // to ~/Documents/huggingface (HubApi's default), which triggers a macOS
+        // Documents folder permission prompt.
         let config = WhisperKitConfig(
             modelFolder: modelFolder,
+            tokenizerFolder: modelURL,
             download: false,
             useBackgroundDownloadSession: false
         )
@@ -96,6 +115,10 @@ final class TranscriptionService {
             let samples = ringBuffer.read(count: chunkSamples - overlapSamples)
             guard !samples.isEmpty else { continue }
 
+            // Log audio level to diagnose silence/hallucination issues
+            let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(samples.count))
+            logger.notice("Chunk \(chunkStartMs)ms: \(samples.count) samples, RMS=\(rms)")
+
             // Transcribe the chunk with word timestamps for diarization alignment
             let decodeOptions = DecodingOptions(
                 wordTimestamps: true,
@@ -113,6 +136,8 @@ final class TranscriptionService {
                         let startMs = chunkStartMs + Int64(wkSegment.start * 1000)
                         let endMs = chunkStartMs + Int64(wkSegment.end * 1000)
 
+                        logger.notice("Segment: noSpeechProb=\(wkSegment.noSpeechProb) text=\"\(wkSegment.text)\"")
+
                         let cleanedText = Self.cleanTranscriptText(wkSegment.text)
                         guard !cleanedText.isEmpty else { continue }
 
@@ -127,7 +152,7 @@ final class TranscriptionService {
                     }
                 }
             } catch {
-                // Log transcription error but don't stop the loop
+                logger.error("Transcription chunk error: \(error.localizedDescription)")
                 continue
             }
 

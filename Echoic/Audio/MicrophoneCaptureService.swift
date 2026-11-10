@@ -98,7 +98,7 @@ final class MicrophoneCaptureService {
             throw MicrophoneError.deviceNotAvailable
         }
 
-        micLogger.info("Mic format: \(sampleRate) Hz, \(format.channelCount) ch")
+        micLogger.notice("Mic format: \(sampleRate) Hz, \(format.channelCount) ch")
 
         // Reinitialize ring buffer to match actual mic sample rate
         self.ringBuffer = RingBuffer(durationSeconds: 30, sourceSampleRate: sampleRate, targetSampleRate: 16000)
@@ -113,6 +113,7 @@ final class MicrophoneCaptureService {
             micLogger.info("AAC encoder started for mic at \(sampleRate) Hz")
         }
 
+        var tapCallCount = 0
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             guard let self else { return }
 
@@ -122,6 +123,15 @@ final class MicrophoneCaptureService {
             guard let data = channelData, frameCount > 0 else { return }
 
             let samples = Array(UnsafeBufferPointer(start: data, count: frameCount))
+
+            // Log audio levels periodically to diagnose silent-mic issues
+            tapCallCount += 1
+            if tapCallCount % 100 == 1 {
+                let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(samples.count))
+                let peak = samples.map { abs($0) }.max() ?? 0
+                micLogger.notice("Mic tap #\(tapCallCount): \(frameCount) frames, RMS=\(rms), peak=\(peak)")
+            }
+
             self.ringBuffer.write(samples)
             try? self.encoder?.encode(samples: samples)
             self.onAudioSamples?(samples)

@@ -1,5 +1,8 @@
 import Foundation
+import os.log
 import WhisperKit
+
+private let logger = Logger(subsystem: "com.echoic.app", category: "ModelDownloadManager")
 
 /// Downloads and manages WhisperKit CoreML model bundles.
 final class ModelDownloadManager: ObservableObject {
@@ -110,6 +113,62 @@ final class ModelDownloadManager: ObservableObject {
         }
 
         return nil
+    }
+
+    /// Ensures `tokenizer_config.json` exists in the model folder.
+    ///
+    /// WhisperKit's tokenizer loader requires this file alongside `tokenizer.json`.
+    /// Without it, the loader falls through to a HuggingFace Hub download path that
+    /// fails with "Invalid metadata" errors due to a swift-transformers bug.
+    /// This method downloads the file directly from HuggingFace if missing.
+    func ensureTokenizerConfig(in modelFolder: URL) async {
+        let configURL = modelFolder.appendingPathComponent("tokenizer_config.json")
+        guard !FileManager.default.fileExists(atPath: configURL.path) else { return }
+
+        // Determine the HuggingFace model name from the folder name
+        // e.g. "openai_whisper-large-v3" → "openai/whisper-large-v3"
+        let folderName = modelFolder.lastPathComponent
+        let repoId = Self.huggingFaceRepoId(from: folderName)
+        guard let repoId else {
+            logger.warning("Cannot determine HuggingFace repo for folder: \(folderName)")
+            return
+        }
+
+        guard let downloadURL = URL(string: "https://huggingface.co/\(repoId)/resolve/main/tokenizer_config.json") else {
+            logger.warning("Invalid tokenizer_config.json URL for repo: \(repoId)")
+            return
+        }
+        logger.info("Downloading tokenizer_config.json from \(repoId)")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: downloadURL)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                logger.warning("Failed to download tokenizer_config.json: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                return
+            }
+            try data.write(to: configURL)
+            logger.info("Saved tokenizer_config.json (\(data.count) bytes)")
+        } catch {
+            logger.warning("Failed to download tokenizer_config.json: \(error.localizedDescription)")
+        }
+    }
+
+    /// Converts a WhisperKit model folder name to a HuggingFace repo ID.
+    /// e.g. "openai_whisper-large-v3" → "openai/whisper-large-v3"
+    /// e.g. "openai_whisper-large-v3-v20240930" → "openai/whisper-large-v3"
+    static func huggingFaceRepoId(from folderName: String) -> String? {
+        // WhisperKit folder names use underscore to separate org from model name
+        guard let underscoreIndex = folderName.firstIndex(of: "_") else { return nil }
+        let org = String(folderName[..<underscoreIndex])
+        var modelName = String(folderName[folderName.index(after: underscoreIndex)...])
+
+        // Strip WhisperKit version suffix (e.g. "-v20240930")
+        if let range = modelName.range(of: #"-v\d{8,}"#, options: .regularExpression) {
+            modelName = String(modelName[..<range.lowerBound])
+        }
+
+        return "\(org)/\(modelName)"
     }
 
     /// Finds a model folder by name prefix (WhisperKit may append version suffixes).

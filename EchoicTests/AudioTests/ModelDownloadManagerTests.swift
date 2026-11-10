@@ -162,6 +162,53 @@ final class ModelDownloadManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: cacheDir.path))
     }
 
+    // MARK: - huggingFaceRepoId
+
+    func testHuggingFaceRepoIdFromStandardName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3"),
+            "openai/whisper-large-v3"
+        )
+    }
+
+    func testHuggingFaceRepoIdFromVersionedName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3-v20240930"),
+            "openai/whisper-large-v3"
+        )
+    }
+
+    func testHuggingFaceRepoIdFromSmallEnName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-small.en"),
+            "openai/whisper-small.en"
+        )
+    }
+
+    func testHuggingFaceRepoIdReturnsNilForInvalidName() {
+        XCTAssertNil(ModelDownloadManager.huggingFaceRepoId(from: "no-underscore"))
+    }
+
+    // MARK: - ensureTokenizerConfig
+
+    func testEnsureTokenizerConfigSkipsWhenExists() async {
+        let fm = FileManager.default
+        let modelDir = tempDir.appendingPathComponent("test-model")
+        try! fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
+
+        // Pre-create tokenizer_config.json
+        let configPath = modelDir.appendingPathComponent("tokenizer_config.json")
+        let originalContent = "{\"test\": true}".data(using: .utf8)!
+        fm.createFile(atPath: configPath.path, contents: originalContent)
+
+        let manager = ModelDownloadManager()
+        await manager.ensureTokenizerConfig(in: modelDir)
+
+        // File should be unchanged (not overwritten)
+        let data = try! Data(contentsOf: configPath)
+        XCTAssertEqual(data, originalContent, "Existing file should not be modified")
+    }
+
     // MARK: - refreshDownloadedModels
 
     func testRefreshDownloadedModelsFiltersAvailable() {
