@@ -33,12 +33,15 @@ struct SettingsView: View {
 struct GeneralSettingsTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showConsentReminder") private var showConsentReminder = true
+    @AppStorage(MeetingDetector.settingsKey) private var detectMeetings = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                 Toggle("Show recording consent reminder", isOn: $showConsentReminder)
+                Toggle("Offer to start and stop recording with meetings", isOn: $detectMeetings)
+                    .help("Prompts when another app starts or stops using your microphone.")
             }
 
             Divider()

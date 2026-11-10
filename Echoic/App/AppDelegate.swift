@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon — menu bar only
@@ -19,6 +20,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWorkspace.willSleepNotification,
             object: nil
         )
+
+        // Offer to record when another app starts using the microphone
+        UNUserNotificationCenter.current().delegate = self
+        MeetingDetector.registerNotificationCategories()
+        Task { @MainActor in
+            MeetingDetector.shared.start()
+        }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let category = response.notification.request.content.categoryIdentifier
+        guard MeetingDetector.handles(category: category) else { return }
+        let action = response.actionIdentifier
+        await MainActor.run {
+            MeetingDetector.shared.handleNotificationResponse(category: category, action: action)
+        }
     }
 
     @objc private func handleSleep(_ notification: Notification) {
