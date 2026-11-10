@@ -164,21 +164,18 @@ final class MeetingDetector: ObservableObject {
         // No-op after the first time; asks for permission on first detection.
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
 
+        let text = Self.notificationText(for: prompt)
         let content = UNMutableNotificationContent()
+        content.title = text.title
+        content.body = text.body
         content.sound = .default
-        let requestId: String
 
+        let requestId: String
         switch prompt {
-        case .start(let usage):
-            content.title = "Meeting detected"
-            content.body = usage.appName.map { "\($0) is using your microphone. Start recording this meeting?" }
-                ?? "Your microphone is in use. Start recording this meeting?"
+        case .start:
             content.categoryIdentifier = NotificationIds.startCategory
             requestId = NotificationIds.startRequest
-        case .stop(let appName):
-            content.title = "Meeting ended?"
-            content.body = appName.map { "\($0) stopped using your microphone. Stop recording?" }
-                ?? "Your microphone is no longer in use. Stop recording?"
+        case .stop:
             content.categoryIdentifier = NotificationIds.stopCategory
             requestId = NotificationIds.stopRequest
         }
@@ -188,6 +185,20 @@ final class MeetingDetector: ObservableObject {
             try await center.add(request)
         } catch {
             logger.error("Failed to post meeting notification: \(error.localizedDescription)")
+        }
+    }
+
+    /// Notification wording. Names Echoic explicitly, since the banner may not
+    /// otherwise make clear which app is asking.
+    nonisolated static func notificationText(for prompt: MeetingPrompt) -> (title: String, body: String) {
+        switch prompt {
+        case .start(let usage):
+            let what = usage.appName.map { "\($0) is using your microphone." } ?? "Your microphone is in use."
+            return ("Meeting detected", "\(what) Should Echoic start recording?")
+        case .stop(let appName):
+            let what = appName.map { "\($0) stopped using your microphone." }
+                ?? "Your microphone is no longer in use."
+            return ("Meeting ended?", "\(what) Should Echoic stop recording?")
         }
     }
 
