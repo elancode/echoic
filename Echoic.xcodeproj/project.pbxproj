@@ -15,7 +15,6 @@
 		194E043CA5AD0F57C8FC552C /* DateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932FDCFC3A64143271C1505C /* DateFormatting.swift */; };
 		1A46F79D324610DD4241B083 /* TranscriptDeduplicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13F2F205B76255DB0DE1814 /* TranscriptDeduplicatorTests.swift */; };
 		1B957CD305866F8D3BA5C088 /* Summary.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD496C2C98DEE8B18DA77871 /* Summary.swift */; };
-		1CF3B06FE2B514DB3B8646EA /* DateFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D680688E30B8601F186A095E /* DateFormattingTests.swift */; };
 		24F20D407056BB68EA5B6E87 /* MeetingEndDetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A75796DF8AD018AC9E0DB4E /* MeetingEndDetectionPolicy.swift */; };
 		256DEED3C18F4B4C37FA6B6E /* RingBufferTranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4421C6C3918BEDE5542852D3 /* RingBufferTranscriptionTests.swift */; };
 		2D9F2CCB7EECB459FDFCE454 /* RingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65AD669508BECF155193B20 /* RingBufferTests.swift */; };
@@ -142,7 +141,6 @@
 		CC022000F5EB584B6719D2CA /* ModelDownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadManagerTests.swift; sourceTree = "<group>"; };
 		CEBD579E5A89A758224BEF79 /* Echoic.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Echoic.entitlements; sourceTree = "<group>"; };
 		D5F16C22312BFD1B78E6139F /* Meeting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meeting.swift; sourceTree = "<group>"; };
-		D680688E30B8601F186A095E /* DateFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormattingTests.swift; sourceTree = "<group>"; };
 		E27D7FDCE2503AE5CDFB5AA2 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		E922F2879D96CF89BD3931FE /* MeetingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetector.swift; sourceTree = "<group>"; };
 		EFE6022B6FEEA119C5D22B3A /* DatabaseManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseManagerTests.swift; sourceTree = "<group>"; };
@@ -259,7 +257,6 @@
 			isa = PBXGroup;
 			children = (
 				EFE6022B6FEEA119C5D22B3A /* DatabaseManagerTests.swift */,
-				D680688E30B8601F186A095E /* DateFormattingTests.swift */,
 				51F9ECF3EC4DFC7F5017C7DA /* ULIDTests.swift */,
 			);
 			path = StorageTests;
@@ -521,7 +518,6 @@
 			files = (
 				8E93EBE7675EA60F8918B1A4 /* AudioCaptureErrorTests.swift in Sources */,
 				E788B9D75E3085FF55A575B6 /* DatabaseManagerTests.swift in Sources */,
-				1CF3B06FE2B514DB3B8646EA /* DateFormattingTests.swift in Sources */,
 				B1624AE100D6CCB1657C1C24 /* MeetingDetectionPolicyTests.swift in Sources */,
 				3C466E4ACE1853E34B4FC32F /* MeetingDetectorTests.swift in Sources */,
 				972404ED3566E04B3BC32A64 /* MeetingEndDetectionPolicyTests.swift in Sources */,

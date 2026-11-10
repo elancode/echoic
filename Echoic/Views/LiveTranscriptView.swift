@@ -144,15 +144,9 @@ private struct LiveTranscriptRow: View {
     let segment: TranscriptSegment
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(Date.formatTimestamp(ms: segment.startMs))
-                .font(.system(size: 11).monospacedDigit())
-                .foregroundColor(.secondary)
-            Text(segment.text)
-                .font(.system(size: 13))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
+        Text(segment.text)
+            .font(.system(size: 13))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
