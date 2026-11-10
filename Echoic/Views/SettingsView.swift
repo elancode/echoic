@@ -228,7 +228,7 @@ struct AudioSettingsTab: View {
 // MARK: - Models
 
 struct ModelSettingsTab: View {
-    @StateObject private var modelManager = ModelDownloadManager()
+    @ObservedObject private var modelManager = ModelDownloadManager.shared
     @AppStorage("summarizationModel") private var summarizationModel = "claude-sonnet-4-6"
 
     private static let availableSummarizationModels = [

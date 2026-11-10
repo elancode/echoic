@@ -81,6 +81,10 @@ final class MeetingDetector: ObservableObject {
 
     /// Dismisses the prompt without acting ("Not Now" / "Keep Recording").
     func dismissPrompt() {
+        if case .start = prompt {
+            // Model was preloaded for this prompt; let it unload if unused
+            MeetingCoordinator.shared.scheduleModelUnload()
+        }
         hidePrompt()
     }
 
@@ -136,10 +140,18 @@ final class MeetingDetector: ObservableObject {
         case .prompt:
             logger.info("Showing meeting prompt: \(String(describing: newPrompt), privacy: .public)")
             prompt = newPrompt
+            if case .start = newPrompt {
+                // Warm the model now so recording starts transcribing immediately
+                Task { try? await MeetingCoordinator.shared.prepareTranscriptionModel() }
+            }
             Task { await postNotification(for: newPrompt) }
         case .dismissPrompt:
             if prompt?.kind == newPrompt.kind {
                 prompt = nil
+            }
+            if newPrompt.kind == .start, MeetingCoordinator.shared.state != .recording {
+                // Call ended without recording; release the preloaded model later
+                MeetingCoordinator.shared.scheduleModelUnload()
             }
             removeNotification(for: newPrompt)
         case .none:

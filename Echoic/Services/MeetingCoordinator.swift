@@ -25,6 +25,11 @@ final class MeetingCoordinator: ObservableObject {
     private let diarizationService = DiarizationService()
     private let localSpeakerIdentifier = LocalSpeakerIdentifier()
     private var transcriptionStore: TranscriptionStore?
+    private var modelLoadTask: Task<Void, Error>?
+    private var modelUnloadTask: Task<Void, Never>?
+    /// Keep the model loaded this long after a recording (or a dismissed prompt)
+    /// so back-to-back meetings don't pay the load cost again.
+    private static let modelIdleUnloadDelay: UInt64 = 10 * 60 * 1_000_000_000
     private var enableMicrophone = false
 
     /// The database writer for all operations.
@@ -89,12 +94,7 @@ final class MeetingCoordinator: ObservableObject {
             // Batch transcription can recover the transcript after the meeting.
             if IntelFallback.supportsRealTimeTranscription {
                 do {
-                    let modelManager = ModelDownloadManager()
-                    if let modelPath = modelManager.bestAvailableModelPath() {
-                        try await transcriptionService.initialize(modelFolder: modelPath)
-                    } else {
-                        try await transcriptionService.initialize()
-                    }
+                    try await prepareTranscriptionModel()
                     transcriptionService.onSegment = { [weak self] segment in
                         Task { @MainActor in
                             self?.handleNewSegment(segment)
@@ -166,12 +166,7 @@ final class MeetingCoordinator: ObservableObject {
             if IntelFallback.isIntelMac {
                 let audioURL = try AudioFileManager.finalAudioURL(meetingId: meeting.id)
                 if transcriptionService.active == false {
-                    let modelManager = ModelDownloadManager()
-                    if let modelPath = modelManager.bestAvailableModelPath() {
-                        try await transcriptionService.initialize(modelFolder: modelPath)
-                    } else {
-                        try await transcriptionService.initialize()
-                    }
+                    try await prepareTranscriptionModel()
                 }
                 try await IntelFallback.batchTranscribe(
                     audioURL: audioURL,
@@ -249,6 +244,7 @@ final class MeetingCoordinator: ObservableObject {
             state = .idle
             currentMeeting = nil
             liveSegments = []
+            scheduleModelUnload()
 
         } catch {
             // Ensure capture services are stopped even on error
@@ -270,6 +266,44 @@ final class MeetingCoordinator: ObservableObject {
 
             state = .error(error.localizedDescription)
             errorMessage = error.localizedDescription
+            scheduleModelUnload()
+        }
+    }
+
+    // MARK: - Model Lifecycle
+
+    /// Loads the transcription model if it isn't already, at low priority.
+    /// Concurrent callers share one load. Called when a recording starts and
+    /// when a meeting is detected (so the model is warm before Start is clicked).
+    func prepareTranscriptionModel() async throws {
+        modelUnloadTask?.cancel()
+        modelUnloadTask = nil
+
+        if let inFlight = modelLoadTask {
+            try await inFlight.value
+            return
+        }
+
+        let service = transcriptionService
+        let task = Task.detached(priority: .utility) {
+            if let modelPath = ModelDownloadManager().bestAvailableModelPath() {
+                try await service.initialize(modelFolder: modelPath)
+            } else {
+                try await service.initialize()
+            }
+        }
+        modelLoadTask = task
+        defer { modelLoadTask = nil }
+        try await task.value
+    }
+
+    /// Unloads the model after an idle period, unless a recording starts first.
+    func scheduleModelUnload() {
+        modelUnloadTask?.cancel()
+        modelUnloadTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.modelIdleUnloadDelay)
+            guard !Task.isCancelled, let self, self.state != .recording, self.modelLoadTask == nil else { return }
+            await self.transcriptionService.unloadModel()
         }
     }
 

@@ -20,15 +20,24 @@ final class TranscriptionService {
     /// Current meeting ID being transcribed.
     private(set) var meetingId: String?
 
+    /// Folder of the currently loaded model (nil if none, or loaded by variant name).
+    private(set) var loadedModelFolder: String?
+
+    /// Whether a WhisperKit model is loaded and ready.
+    var isModelLoaded: Bool { whisperKit != nil }
+
     /// Initializes WhisperKit with the given model variant.
     /// - Parameter model: Model name (e.g. "small.en", "large-v3"). If nil, uses default.
+    /// No-op if a model is already loaded.
     func initialize(model: String? = nil) async throws {
+        guard whisperKit == nil else { return }
+
         let manager = ModelDownloadManager()
         manager.cleanCache()
 
-        // Ensure tokenizer_config.json exists for all downloaded models
+        // Ensure tokenizer files exist for all downloaded models
         if let modelPath = manager.bestAvailableModelPath() {
-            await manager.ensureTokenizerConfig(in: URL(fileURLWithPath: modelPath))
+            await manager.ensureTokenizerFiles(in: URL(fileURLWithPath: modelPath))
         }
 
         let baseDir = manager.baseDirectory
@@ -44,14 +53,18 @@ final class TranscriptionService {
     }
 
     /// Initializes WhisperKit from a pre-downloaded model folder.
+    /// No-op if that model is already loaded — loading a large model is a burst of
+    /// heavy CPU/Neural Engine work, so it's done once and kept between recordings.
     func initialize(modelFolder: String) async throws {
+        if whisperKit != nil, loadedModelFolder == modelFolder { return }
+
         let manager = ModelDownloadManager()
         manager.cleanCache()
 
-        // Ensure tokenizer_config.json exists — WhisperKit's tokenizer loader
-        // requires it to avoid falling through to a buggy HuggingFace Hub download.
+        // Ensure tokenizer files exist — WhisperKit's tokenizer loader needs them
+        // to avoid falling through to a buggy HuggingFace Hub download.
         let modelURL = URL(fileURLWithPath: modelFolder)
-        await manager.ensureTokenizerConfig(in: modelURL)
+        await manager.ensureTokenizerFiles(in: modelURL)
 
         // Set tokenizerFolder to our model directory so WhisperKit doesn't fall back
         // to ~/Documents/huggingface (HubApi's default), which triggers a macOS
@@ -63,7 +76,20 @@ final class TranscriptionService {
             useBackgroundDownloadSession: false
         )
         config.verbose = false
+        let start = Date()
         whisperKit = try await WhisperKit(config)
+        loadedModelFolder = modelFolder
+        ModelDownloadManager.markPrewarmed(modelFolder: modelURL)
+        logger.notice("Loaded model \(modelURL.lastPathComponent, privacy: .public) in \(Date().timeIntervalSince(start), format: .fixed(precision: 1))s")
+    }
+
+    /// Releases the model's memory and Neural Engine resources.
+    func unloadModel() async {
+        guard !isTranscribing, let whisperKit else { return }
+        await whisperKit.unloadModels()
+        self.whisperKit = nil
+        loadedModelFolder = nil
+        logger.notice("Unloaded transcription model")
     }
 
     /// Starts real-time transcription from the ring buffer.
@@ -73,7 +99,9 @@ final class TranscriptionService {
         self.meetingId = meetingId
         isTranscribing = true
 
-        Task {
+        // Low priority so meeting apps (video, effects) win when competing for
+        // CPU / Neural Engine time. Real-time is still met with headroom.
+        Task.detached(priority: .utility) { [self] in
             await transcriptionLoop(ringBuffer: ringBuffer)
         }
     }

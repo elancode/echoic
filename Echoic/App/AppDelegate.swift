@@ -27,6 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Task { @MainActor in
             MeetingDetector.shared.start()
         }
+
+        // Fetch and prewarm the lighter Large v3 Turbo model if needed (one-time,
+        // ~1.6 GB + ~3 min Neural Engine compile). Skipped when hosting unit tests.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            Task.detached(priority: .background) {
+                await ModelDownloadManager.shared.prepareRecommendedModelIfNeeded()
+            }
+        }
     }
 
     // MARK: - UNUserNotificationCenterDelegate
