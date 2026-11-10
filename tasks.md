@@ -66,7 +66,7 @@
 - [ ] **T44** · End-to-end testing with real meetings (10 test recordings across the audio corpus) · **L** · blocked-by: T32
 - [ ] **T45** · Private beta release to 10 users, collect feedback · **M** · blocked-by: T41, T44
 - [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · **S** · blocked-by: T31
-- [ ] **T47** · Fix stale test schemas in DatabaseManagerTests/SpeakerMergeTests (missing `meeting.processed` column — 5 failing tests) · **S**
+- [x] **T47** · Fix stale test schemas in DatabaseManagerTests/SpeakerMergeTests (missing `meeting.processed` column — 5 failing tests) · **S**
 - [x] **T48** · Meeting auto-detection: prompt to start recording when another app takes the mic, and to stop when it releases it (notification actions + popover prompt, Settings toggle) · **M** · blocked-by: T31
 
 ---
@@ -115,3 +115,4 @@
 - [x] **T43** · Add recording consent reminder feature (UNUserNotificationCenter) · completed 2026-03-22
 - [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · completed 2026-11-10
 - [x] **T48** · Meeting auto-detection (mic-in-use → "Start Recording?" / mic released → "Stop Recording?" prompts) · completed 2026-11-10
+- [x] **T47** · Tests use real app migrations (fixes 5 failures from missing `meeting.processed`) · completed 2026-11-10

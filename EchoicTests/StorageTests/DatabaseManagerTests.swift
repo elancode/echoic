@@ -10,77 +10,7 @@ final class DatabaseManagerTests: XCTestCase {
         config.foreignKeysEnabled = true
         dbQueue = try DatabaseQueue(configuration: config)
 
-        var migrator = DatabaseMigrator()
-        migrator.registerMigration("v1") { db in
-            try db.create(table: "meeting") { t in
-                t.column("id", .text).primaryKey()
-                t.column("title", .text).notNull()
-                t.column("startedAt", .integer).notNull()
-                t.column("endedAt", .integer)
-                t.column("durationMs", .integer)
-                t.column("audioPath", .text)
-                t.column("status", .text).notNull().defaults(to: "recording")
-            }
-
-            try db.create(table: "transcriptSegment") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("meetingId", .text)
-                    .notNull()
-                    .references("meeting", onDelete: .cascade)
-                t.column("startMs", .integer).notNull()
-                t.column("endMs", .integer).notNull()
-                t.column("speakerId", .text)
-                t.column("text", .text).notNull()
-                t.column("confidence", .double)
-            }
-
-            try db.execute(sql: """
-                CREATE VIRTUAL TABLE transcriptFts USING fts5(
-                    text,
-                    content='transcriptSegment',
-                    content_rowid='id',
-                    tokenize='porter'
-                )
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_ai AFTER INSERT ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(rowid, text) VALUES (new.id, new.text);
-                END
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_ad AFTER DELETE ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(transcriptFts, rowid, text) VALUES('delete', old.id, old.text);
-                END
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_au AFTER UPDATE ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(transcriptFts, rowid, text) VALUES('delete', old.id, old.text);
-                    INSERT INTO transcriptFts(rowid, text) VALUES (new.id, new.text);
-                END
-                """)
-
-            try db.create(table: "summary") { t in
-                t.column("meetingId", .text).primaryKey()
-                    .references("meeting", onDelete: .cascade)
-                t.column("rawJson", .text).notNull()
-                t.column("executiveSummary", .text)
-                t.column("title", .text)
-                t.column("createdAt", .integer).notNull()
-            }
-
-            try db.create(table: "meetingSpeaker") { t in
-                t.column("meetingId", .text)
-                    .notNull()
-                    .references("meeting", onDelete: .cascade)
-                t.column("speakerId", .text).notNull()
-                t.column("label", .text).notNull()
-                t.primaryKey(["meetingId", "speakerId"])
-            }
-        }
-        try migrator.migrate(dbQueue)
+        try DatabaseManager.migrate(dbQueue)
     }
 
     override func tearDown() {
