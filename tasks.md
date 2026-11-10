@@ -65,6 +65,8 @@
 - [x] **T43** · Add recording consent reminder feature (configurable notification to meeting participants) · **S** · blocked-by: T32
 - [ ] **T44** · End-to-end testing with real meetings (10 test recordings across the audio corpus) · **L** · blocked-by: T32
 - [ ] **T45** · Private beta release to 10 users, collect feedback · **M** · blocked-by: T41, T44
+- [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · **S** · blocked-by: T31
+- [ ] **T47** · Fix stale test schemas in DatabaseManagerTests/SpeakerMergeTests (missing `meeting.processed` column — 5 failing tests) · **S**
 
 ---
 
@@ -110,3 +112,4 @@
 - [x] **T38** · Implement meeting status state machine (MeetingState enum with error handling) · completed 2026-03-22
 - [x] **T42** · Sparkle dependency added in project.yml · completed 2026-03-22
 - [x] **T43** · Add recording consent reminder feature (UNUserNotificationCenter) · completed 2026-03-22
+- [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · completed 2026-11-10

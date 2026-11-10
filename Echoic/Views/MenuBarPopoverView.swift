@@ -124,6 +124,25 @@ struct MenuBarPopoverView: View {
             }
             .buttonStyle(.plain)
 
+            if coordinator.state == .recording {
+                Divider()
+
+                Button(action: openLiveTranscript) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 12))
+                        Text("Show Live Transcript")
+                            .font(.system(size: 13))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show live transcript window")
+            }
+
             Divider()
 
             Button(action: { NSApp.terminate(nil) }) {
@@ -164,6 +183,12 @@ struct MenuBarPopoverView: View {
     private func openSettings() {
         NSApp.setActivationPolicy(.regular)
         openWindow(id: "settings")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func openLiveTranscript() {
+        NSApp.setActivationPolicy(.regular)
+        openWindow(id: "live-transcript")
         NSApp.activate(ignoringOtherApps: true)
     }
 

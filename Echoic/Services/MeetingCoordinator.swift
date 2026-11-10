@@ -277,10 +277,14 @@ final class MeetingCoordinator: ObservableObject {
 
     private func handleNewSegment(_ segment: TranscriptSegment) {
         do {
-            try transcriptionStore?.insert(segment)
-            liveSegments.append(segment)
+            // Only surface segments that were actually stored (not deduplicated),
+            // so the live transcript matches what's persisted.
+            if let stored = try transcriptionStore?.insert(segment) {
+                liveSegments.append(stored)
+            }
         } catch {
             // Log but don't interrupt recording
+            logger.error("Failed to store transcript segment: \(error.localizedDescription)")
         }
     }
 }

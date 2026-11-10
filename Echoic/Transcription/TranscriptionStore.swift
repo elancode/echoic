@@ -12,10 +12,12 @@ final class TranscriptionStore {
     }
 
     /// Inserts a new transcript segment, deduplicating against recent segments.
-    func insert(_ segment: TranscriptSegment) throws {
+    /// - Returns: The stored segment (with its row ID), or `nil` if it was a duplicate.
+    @discardableResult
+    func insert(_ segment: TranscriptSegment) throws -> TranscriptSegment? {
         // Check for duplicates
         guard !TranscriptDeduplicator.isDuplicate(segment, of: recentSegments) else {
-            return
+            return nil
         }
 
         var mutableSegment = segment
@@ -29,6 +31,7 @@ final class TranscriptionStore {
         if recentSegments.count > 20 {
             recentSegments.removeFirst(recentSegments.count - 20)
         }
+        return mutableSegment
     }
 
     /// Fetches all segments for a meeting, ordered by start time.
