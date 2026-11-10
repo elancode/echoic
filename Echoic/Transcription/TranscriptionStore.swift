@@ -20,6 +20,11 @@ final class TranscriptionStore {
             return nil
         }
 
+        // Drop mic segments that are other participants heard through the speakers
+        if segment.isLocalSpeaker, CrossTalkFilter.isBleed(segment, against: recentSegments) {
+            return nil
+        }
+
         var mutableSegment = segment
         try databaseWriter.write { db in
             try mutableSegment.insert(db)

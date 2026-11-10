@@ -144,9 +144,16 @@ private struct LiveTranscriptRow: View {
     let segment: TranscriptSegment
 
     var body: some View {
-        Text(segment.text)
-            .font(.system(size: 13))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+        if segment.isLocalSpeaker {
+            (Text("You  ").fontWeight(.semibold).foregroundColor(.accentColor) + Text(segment.text))
+                .font(.system(size: 13))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(segment.text)
+                .font(.system(size: 13))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

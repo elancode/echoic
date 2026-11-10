@@ -49,7 +49,7 @@ enum SummaryPromptTemplate {
 
         for segment in segments {
             let timestamp = formatTimestamp(ms: segment.startMs)
-            let speaker = segment.speakerId ?? "Unknown"
+            let speaker = segment.speakerDisplayName
             lines.append("[\(timestamp)] \(speaker): \(segment.text)")
         }
 

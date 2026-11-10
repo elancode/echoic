@@ -18,6 +18,9 @@ enum SpeakerMerge {
                 .fetchAll(db)
 
             for i in 0..<transcriptSegments.count {
+                // Mic segments are already known to be the local user
+                guard !transcriptSegments[i].isLocalSpeaker else { continue }
+
                 let bestSpeaker = findBestSpeaker(
                     for: transcriptSegments[i],
                     in: speakerSegments
@@ -39,6 +42,11 @@ enum SpeakerMerge {
                     label: label
                 )
                 try meetingSpeaker.insert(db)
+            }
+
+            if transcriptSegments.contains(where: \.isLocalSpeaker) {
+                let you = MeetingSpeaker(meetingId: meetingId, speakerId: TranscriptSegment.localSpeakerId, label: "You")
+                try you.insert(db, onConflict: .ignore)
             }
         }
     }
@@ -67,7 +75,7 @@ enum SpeakerMerge {
 
     /// Returns a default label for a speaker ID.
     private static func defaultLabel(for speakerId: String) -> String {
-        if speakerId == "you" { return "You" }
+        if speakerId == TranscriptSegment.localSpeakerId { return "You" }
 
         // "speaker_1" → "Speaker 1"
         if let number = speakerId.split(separator: "_").last {

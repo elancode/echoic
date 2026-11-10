@@ -64,16 +64,22 @@ enum PostProcessingService {
         }
     }
 
+    /// True if no segment has a diarized speaker yet. Mic ("You") segments are
+    /// labeled at capture time and don't count as diarized.
+    static func needsDiarization(meetingId: String, db: Database) throws -> Bool {
+        let count = try Int.fetchOne(db, sql: """
+            SELECT COUNT(*) FROM transcriptSegment
+            WHERE meetingId = ? AND speakerId IS NOT NULL AND speakerId != ?
+            """, arguments: [meetingId, TranscriptSegment.localSpeakerId])
+        return (count ?? 0) == 0
+    }
+
     private static func postProcess(meeting: Meeting, diarizationService: DiarizationService, databaseWriter: any DatabaseWriter) async {
         logger.info("Post-processing meeting \(meeting.id): \(meeting.title)")
 
         // Check if transcript segments already have speaker IDs
         let needsDiarization: Bool = (try? await databaseWriter.read { db in
-            let count = try Int.fetchOne(db, sql: """
-                SELECT COUNT(*) FROM transcriptSegment
-                WHERE meetingId = ? AND speakerId IS NOT NULL
-                """, arguments: [meeting.id])
-            return (count ?? 0) == 0
+            try PostProcessingService.needsDiarization(meetingId: meeting.id, db: db)
         }) ?? true
 
         // Try diarization if segments lack speaker IDs

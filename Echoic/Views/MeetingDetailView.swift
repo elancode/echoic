@@ -262,7 +262,7 @@ struct MeetingDetailView: View {
         var currentTexts: [Swift.String] = []
 
         for segment in segments {
-            let speaker = segment.speakerId ?? "Unknown"
+            let speaker = segment.speakerDisplayName
             if speaker != currentSpeaker {
                 // Flush previous speaker's text
                 if !currentTexts.isEmpty {

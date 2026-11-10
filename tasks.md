@@ -68,6 +68,10 @@
 - [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · **S** · blocked-by: T31
 - [x] **T47** · Fix stale test schemas in DatabaseManagerTests/SpeakerMergeTests (missing `meeting.processed` column — 5 failing tests) · **S**
 - [x] **T48** · Meeting auto-detection: prompt to start recording when another app takes the mic, and to stop when it releases it (notification actions + popover prompt, Settings toggle) · **M** · blocked-by: T31
+- [x] **T49** · Performance: Whisper large-v3 turbo, prewarm after download, load model once, utility-priority inference · **M**
+- [x] **T50** · Transcribe the user's mic as a separate "You" track in System Audio mode (cross-talk filter, resampling, silence gate) · **M** · blocked-by: T49
+- [ ] **T51** · Handle input device changes mid-recording (e.g. AirPods connecting) — AVAudioEngine stops on configuration change · **S**
+- [ ] **T52** · Settings → Audio input device picker is not persisted or used · **S**
 
 ---
 
@@ -116,3 +120,5 @@
 - [x] **T46** · Live transcript window (menu bar button during recording, scrollable auto-following transcript) · completed 2026-11-10
 - [x] **T48** · Meeting auto-detection (mic-in-use → "Start Recording?" / mic released → "Stop Recording?" prompts) · completed 2026-11-10
 - [x] **T47** · Tests use real app migrations (fixes 5 failures from missing `meeting.processed`) · completed 2026-11-10
+- [x] **T49** · Performance: large-v3 turbo + model lifecycle + low-priority inference · completed 2026-11-10
+- [x] **T50** · Mic transcribed as separate "You" track · completed 2026-11-10

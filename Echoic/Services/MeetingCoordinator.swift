@@ -30,7 +30,19 @@ final class MeetingCoordinator: ObservableObject {
     /// Keep the model loaded this long after a recording (or a dismissed prompt)
     /// so back-to-back meetings don't pay the load cost again.
     private static let modelIdleUnloadDelay: UInt64 = 10 * 60 * 1_000_000_000
+    /// Mic chunks with no 100ms window above this RMS are treated as silence.
+    private static let micSilenceThreshold: Float = 0.01
     private var enableMicrophone = false
+    /// True when the mic is transcribed as its own "You" track (System Audio mode).
+    private var micTranscribedSeparately = false
+
+    /// UserDefaults key for "Transcribe my microphone" (Settings → Audio).
+    nonisolated static let microphoneSettingKey = "enableMicrophone"
+
+    /// Whether to capture and transcribe the user's mic in System Audio mode (on by default).
+    nonisolated static func transcribesMicrophone(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: microphoneSettingKey) as? Bool ?? true
+    }
 
     /// The database writer for all operations.
     var databaseWriter: (any DatabaseWriter)?
@@ -49,7 +61,8 @@ final class MeetingCoordinator: ObservableObject {
 
         do {
             let meeting = Meeting.create()
-            enableMicrophone = enableMic || recordingMode == .microphone
+            enableMicrophone = false
+            micTranscribedSeparately = false
 
             // Insert meeting into database
             guard let db = databaseWriter else {
@@ -70,22 +83,36 @@ final class MeetingCoordinator: ObservableObject {
             transcriptionStore = TranscriptionStore(databaseWriter: db)
             transcriptionStore?.resetCache()
 
-            // Choose audio source based on recording mode
-            let transcriptionRingBuffer: RingBuffer
+            // Choose audio sources based on recording mode
+            var transcriptionSources: [TranscriptionService.AudioSource]
             if recordingMode == .microphone {
                 // Microphone mode: mic is the primary audio source.
                 // On non-sandboxed macOS, AVAudioEngine.start() triggers the
                 // system permission prompt directly — no pre-check needed.
                 try micCaptureService.startCapture(meetingId: meeting.id)
-                transcriptionRingBuffer = micCaptureService.micBuffer
+                enableMicrophone = true
+                transcriptionSources = [.init(ringBuffer: micCaptureService.micBuffer)]
             } else {
-                // System audio mode: ScreenCaptureKit is primary
+                // System audio mode: ScreenCaptureKit captures the other participants
                 try await audioCaptureService.startCapture(meetingId: meeting.id)
-                transcriptionRingBuffer = audioCaptureService.ringBuffer
+                transcriptionSources = [.init(ringBuffer: audioCaptureService.ringBuffer)]
 
-                // Start mic capture for speaker ID if enabled
-                if enableMic {
-                    try micCaptureService.startCapture()
+                // Your own voice never plays through system audio, so transcribe the
+                // mic as a separate "You" track. Non-fatal if the mic is unavailable.
+                if enableMic || Self.transcribesMicrophone() {
+                    do {
+                        try micCaptureService.startCapture()
+                        enableMicrophone = true
+                        micTranscribedSeparately = true
+                        transcriptionSources.append(.init(
+                            ringBuffer: micCaptureService.micBuffer,
+                            speakerId: TranscriptSegment.localSpeakerId,
+                            silenceThreshold: Self.micSilenceThreshold
+                        ))
+                    } catch {
+                        logger.error("Mic capture failed (non-fatal): \(error.localizedDescription)")
+                        errorMessage = "Microphone unavailable — only other participants will be transcribed. \(error.localizedDescription)"
+                    }
                 }
             }
 
@@ -102,7 +129,7 @@ final class MeetingCoordinator: ObservableObject {
                     }
                     transcriptionService.startTranscription(
                         meetingId: meeting.id,
-                        ringBuffer: transcriptionRingBuffer
+                        sources: transcriptionSources
                     )
                 } catch {
                     logger.error("Transcription init failed (non-fatal): \(error.localizedDescription)")
@@ -196,8 +223,9 @@ final class MeetingCoordinator: ObservableObject {
                             databaseWriter: db
                         )
 
-                        // Local speaker identification
-                        if enableMicrophone {
+                        // Local speaker identification by voice matching — only needed
+                        // when the mic wasn't already transcribed as its own track.
+                        if enableMicrophone && !micTranscribedSeparately {
                             if let matchedSpeaker = try await localSpeakerIdentifier.identify(
                                 micBuffer: micCaptureService.micBuffer,
                                 speakerSegments: speakerSegments,
@@ -314,7 +342,8 @@ final class MeetingCoordinator: ObservableObject {
             // Only surface segments that were actually stored (not deduplicated),
             // so the live transcript matches what's persisted.
             if let stored = try transcriptionStore?.insert(segment) {
-                liveSegments.append(stored)
+                // System and mic tracks arrive out of order; keep time order
+                liveSegments.insertByStartTime(stored)
             }
         } catch {
             // Log but don't interrupt recording

@@ -100,8 +100,14 @@ final class MicrophoneCaptureService {
 
         micLogger.notice("Mic format: \(sampleRate) Hz, \(format.channelCount) ch")
 
-        // Reinitialize ring buffer to match actual mic sample rate
-        self.ringBuffer = RingBuffer(durationSeconds: 30, sourceSampleRate: sampleRate, targetSampleRate: 16000)
+        // Fresh 16 kHz buffer per session. Samples are converted with AVAudioConverter
+        // because device rates (e.g. 24 kHz Bluetooth headsets, 44.1 kHz USB mics)
+        // aren't integer multiples of 16 kHz.
+        self.ringBuffer = RingBuffer(durationSeconds: 30, sourceSampleRate: 16000, targetSampleRate: 16000)
+        guard let resampler = MicrophoneResampler(inputFormat: format) else {
+            micLogger.error("Cannot convert mic format \(sampleRate) Hz / \(format.channelCount) ch to 16 kHz mono")
+            throw MicrophoneError.deviceNotAvailable
+        }
 
         // Set up AAC encoder if this is primary input mode
         if let meetingId {
@@ -132,7 +138,7 @@ final class MicrophoneCaptureService {
                 micLogger.notice("Mic tap #\(tapCallCount): \(frameCount) frames, RMS=\(rms), peak=\(peak)")
             }
 
-            self.ringBuffer.write(samples)
+            self.ringBuffer.writeDownsampled(resampler.resample(buffer))
             try? self.encoder?.encode(samples: samples)
             self.onAudioSamples?(samples)
         }
