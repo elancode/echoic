@@ -63,11 +63,11 @@ final class LocalSpeakerIdentifier {
         try databaseWriter.write { db in
             try db.execute(
                 sql: "UPDATE transcriptSegment SET speakerId = ? WHERE meetingId = ? AND speakerId = ?",
-                arguments: ["you", meetingId, speakerId]
+                arguments: [TranscriptSegment.localSpeakerId, meetingId, speakerId]
             )
             try db.execute(
                 sql: "UPDATE meetingSpeaker SET speakerId = ?, label = ? WHERE meetingId = ? AND speakerId = ?",
-                arguments: ["you", "You", meetingId, speakerId]
+                arguments: [TranscriptSegment.localSpeakerId, "You", meetingId, speakerId]
             )
         }
     }

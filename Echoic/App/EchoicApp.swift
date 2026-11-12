@@ -7,6 +7,7 @@ private let appLogger = Logger(subsystem: "com.echoic.app", category: "App")
 struct EchoicApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var coordinator = MeetingCoordinator.shared
+    @ObservedObject private var meetingDetector = MeetingDetector.shared
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "onboardingComplete")
 
     init() {
@@ -101,6 +102,11 @@ struct EchoicApp: App {
                 }
         }
 
+        Window("Live Transcript", id: "live-transcript") {
+            LiveTranscriptView()
+        }
+        .defaultSize(width: 420, height: 520)
+
         MenuBarExtra {
             MenuBarPopoverView()
         } label: {
@@ -109,6 +115,11 @@ struct EchoicApp: App {
                 if coordinator.state == .recording {
                     Circle()
                         .fill(.red)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 3, y: -3)
+                } else if case .start = meetingDetector.prompt {
+                    Circle()
+                        .fill(.orange)
                         .frame(width: 6, height: 6)
                         .offset(x: 3, y: -3)
                 }

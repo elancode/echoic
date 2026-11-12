@@ -10,60 +10,7 @@ final class SpeakerMergeTests: XCTestCase {
         config.foreignKeysEnabled = true
         dbQueue = try DatabaseQueue(configuration: config)
 
-        var migrator = DatabaseMigrator()
-        migrator.registerMigration("v1") { db in
-            try db.create(table: "meeting") { t in
-                t.column("id", .text).primaryKey()
-                t.column("title", .text).notNull()
-                t.column("startedAt", .integer).notNull()
-                t.column("endedAt", .integer)
-                t.column("durationMs", .integer)
-                t.column("audioPath", .text)
-                t.column("status", .text).notNull().defaults(to: "recording")
-            }
-            try db.create(table: "transcriptSegment") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("meetingId", .text).notNull().references("meeting", onDelete: .cascade)
-                t.column("startMs", .integer).notNull()
-                t.column("endMs", .integer).notNull()
-                t.column("speakerId", .text)
-                t.column("text", .text).notNull()
-                t.column("confidence", .double)
-            }
-            try db.execute(sql: """
-                CREATE VIRTUAL TABLE transcriptFts USING fts5(text, content='transcriptSegment', content_rowid='id', tokenize='porter')
-                """)
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_ai AFTER INSERT ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(rowid, text) VALUES (new.id, new.text);
-                END
-                """)
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_ad AFTER DELETE ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(transcriptFts, rowid, text) VALUES('delete', old.id, old.text);
-                END
-                """)
-            try db.execute(sql: """
-                CREATE TRIGGER transcriptSegment_au AFTER UPDATE ON transcriptSegment BEGIN
-                    INSERT INTO transcriptFts(transcriptFts, rowid, text) VALUES('delete', old.id, old.text);
-                    INSERT INTO transcriptFts(rowid, text) VALUES (new.id, new.text);
-                END
-                """)
-            try db.create(table: "summary") { t in
-                t.column("meetingId", .text).primaryKey().references("meeting", onDelete: .cascade)
-                t.column("rawJson", .text).notNull()
-                t.column("executiveSummary", .text)
-                t.column("title", .text)
-                t.column("createdAt", .integer).notNull()
-            }
-            try db.create(table: "meetingSpeaker") { t in
-                t.column("meetingId", .text).notNull().references("meeting", onDelete: .cascade)
-                t.column("speakerId", .text).notNull()
-                t.column("label", .text).notNull()
-                t.primaryKey(["meetingId", "speakerId"])
-            }
-        }
-        try migrator.migrate(dbQueue)
+        try DatabaseManager.migrate(dbQueue)
     }
 
     func testMergeAssignsSpeakers() throws {
@@ -105,5 +52,43 @@ final class SpeakerMergeTests: XCTestCase {
             try MeetingSpeaker.fetchAll(db)
         }
         XCTAssertEqual(speakers.count, 2)
+    }
+
+    func test_merge_micSegments_keepLocalSpeaker() throws {
+        let meetingId = "01HTEST_MERGE_YOU"
+        try dbQueue.write { db in
+            try Meeting(id: meetingId, title: "Merge You", startedAt: 0, status: .processing).insert(db)
+            var remote = TranscriptSegment(meetingId: meetingId, startMs: 0, endMs: 5000, text: "How was the trip", confidence: 0.9)
+            try remote.insert(db)
+            var mine = TranscriptSegment(meetingId: meetingId, startMs: 5000, endMs: 9000,
+                                         speakerId: TranscriptSegment.localSpeakerId, text: "It was great thanks", confidence: 0.9)
+            try mine.insert(db)
+        }
+        // Diarization of system audio only knows remote speakers; it may still cover the mic segment's time range.
+        let speakerSegments = [DiarizationService.DiarizationSegment(startMs: 0, endMs: 10_000, speakerId: "speaker_1")]
+
+        try SpeakerMerge.merge(meetingId: meetingId, speakerSegments: speakerSegments, databaseWriter: dbQueue)
+
+        let speakerIds = try dbQueue.read { db in
+            try String.fetchAll(db, sql: "SELECT speakerId FROM transcriptSegment WHERE meetingId = ? ORDER BY startMs", arguments: [meetingId])
+        }
+        XCTAssertEqual(speakerIds, ["speaker_1", TranscriptSegment.localSpeakerId])
+    }
+
+    func test_merge_withMicSegments_createsYouMeetingSpeaker() throws {
+        let meetingId = "01HTEST_MERGE_YOU_LABEL"
+        try dbQueue.write { db in
+            try Meeting(id: meetingId, title: "Merge You Label", startedAt: 0, status: .processing).insert(db)
+            var mine = TranscriptSegment(meetingId: meetingId, startMs: 0, endMs: 3000,
+                                         speakerId: TranscriptSegment.localSpeakerId, text: "Morning all", confidence: 0.9)
+            try mine.insert(db)
+        }
+
+        try SpeakerMerge.merge(meetingId: meetingId, speakerSegments: [], databaseWriter: dbQueue)
+
+        let labels = try dbQueue.read { db in
+            try MeetingSpeaker.filter(MeetingSpeaker.Columns.meetingId == meetingId).fetchAll(db).map(\.label)
+        }
+        XCTAssertEqual(labels, ["You"])
     }
 }

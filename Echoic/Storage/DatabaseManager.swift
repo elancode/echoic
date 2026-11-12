@@ -42,7 +42,7 @@ final class DatabaseManager {
         let queue = try DatabaseQueue(configuration: config)
         // For in-memory testing, use DatabaseQueue directly
         // We store it as a DatabaseWriter
-        try migrate(queue)
+        try Self.migrate(queue)
         // Store a reference for testing
         _inMemoryQueue = queue
     }
@@ -58,10 +58,12 @@ final class DatabaseManager {
 
     private func runMigrations() throws {
         guard let dbPool else { return }
-        try migrate(dbPool)
+        try Self.migrate(dbPool)
     }
 
-    private func migrate(_ writer: any DatabaseWriter) throws {
+    /// Runs all app migrations on the given database. Internal so tests can
+    /// build the real, current schema on an in-memory database.
+    static func migrate(_ writer: any DatabaseWriter) throws {
         var migrator = DatabaseMigrator()
 
         // GRDB migrations are append-only (Critical Rule #7)

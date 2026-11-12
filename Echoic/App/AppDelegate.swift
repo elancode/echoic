@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon — menu bar only
@@ -19,6 +20,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWorkspace.willSleepNotification,
             object: nil
         )
+
+        // Offer to record when another app starts using the microphone
+        UNUserNotificationCenter.current().delegate = self
+        MeetingDetector.registerNotificationCategories()
+        Task { @MainActor in
+            MeetingDetector.shared.start()
+        }
+
+        // Fetch and prewarm the lighter Large v3 Turbo model if needed (one-time,
+        // ~1.6 GB + ~3 min Neural Engine compile). Skipped when hosting unit tests.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            Task.detached(priority: .background) {
+                await ModelDownloadManager.shared.prepareRecommendedModelIfNeeded()
+            }
+        }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let category = response.notification.request.content.categoryIdentifier
+        guard MeetingDetector.handles(category: category) else { return }
+        let action = response.actionIdentifier
+        await MainActor.run {
+            MeetingDetector.shared.handleNotificationResponse(category: category, action: action)
+        }
     }
 
     @objc private func handleSleep(_ notification: Notification) {

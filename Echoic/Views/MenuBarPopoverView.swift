@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarPopoverView: View {
     @ObservedObject private var coordinator = MeetingCoordinator.shared
+    @ObservedObject private var meetingDetector = MeetingDetector.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -55,6 +56,15 @@ struct MenuBarPopoverView: View {
                 Divider()
             }
 
+            if let prompt = meetingDetector.prompt {
+                MeetingDetectedPrompt(
+                    prompt: prompt,
+                    onStart: { meetingDetector.acceptPrompt() },
+                    onDismiss: { meetingDetector.dismissPrompt() }
+                )
+                Divider()
+            }
+
             // Source picker (only when not recording)
             if coordinator.state != .recording {
                 Picker("", selection: $coordinator.recordingMode) {
@@ -103,6 +113,25 @@ struct MenuBarPopoverView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
+            }
+
+            if coordinator.state == .recording {
+                Divider()
+
+                Button(action: openLiveTranscript) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 12))
+                        Text("Show Live Transcript")
+                            .font(.system(size: 13))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show live transcript window")
             }
 
             Divider()
@@ -167,12 +196,71 @@ struct MenuBarPopoverView: View {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func openLiveTranscript() {
+        NSApp.setActivationPolicy(.regular)
+        openWindow(id: "live-transcript")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func openLibrary() {
         NSApp.setActivationPolicy(.regular)
         openWindow(id: "library")
         NSApp.activate(ignoringOtherApps: true)
     }
 
+}
+
+struct MeetingDetectedPrompt: View {
+    let prompt: MeetingPrompt
+    let onStart: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                    .foregroundColor(.orange)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            HStack(spacing: 8) {
+                Button(primaryLabel, action: onStart)
+                    .controlSize(.small)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel(primaryAccessibilityLabel)
+                Button(secondaryLabel, action: onDismiss)
+                    .controlSize(.small)
+                    .accessibilityLabel("Dismiss prompt")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private var isStart: Bool {
+        if case .start = prompt { return true }
+        return false
+    }
+
+    private var icon: String { isStart ? "phone.fill" : "phone.down.fill" }
+    private var primaryLabel: String { isStart ? "Start Recording" : "Stop Recording" }
+    private var secondaryLabel: String { isStart ? "Not Now" : "Keep Recording" }
+    private var primaryAccessibilityLabel: String {
+        isStart ? "Start recording this meeting" : "Stop recording this meeting"
+    }
+
+    private var title: String {
+        switch prompt {
+        case .start(let usage):
+            return usage.appName.map { "\($0) is using your mic" } ?? "Meeting detected"
+        case .stop(let appName):
+            return appName.map { "\($0) released your mic" } ?? "Meeting ended?"
+        }
+    }
 }
 
 struct StatusBadge: View {

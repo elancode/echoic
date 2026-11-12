@@ -162,6 +162,54 @@ final class ModelDownloadManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: cacheDir.path))
     }
 
+    // MARK: - huggingFaceRepoId
+
+    func testHuggingFaceRepoIdFromStandardName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3"),
+            "openai/whisper-large-v3"
+        )
+    }
+
+    func testHuggingFaceRepoIdFromVersionedName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3-v20240930"),
+            "openai/whisper-large-v3"
+        )
+    }
+
+    func testHuggingFaceRepoIdFromSmallEnName() {
+        XCTAssertEqual(
+            ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-small.en"),
+            "openai/whisper-small.en"
+        )
+    }
+
+    func testHuggingFaceRepoIdReturnsNilForInvalidName() {
+        XCTAssertNil(ModelDownloadManager.huggingFaceRepoId(from: "no-underscore"))
+    }
+
+    // MARK: - ensureTokenizerConfig
+
+    func testEnsureTokenizerConfigSkipsWhenExists() async {
+        let fm = FileManager.default
+        let modelDir = tempDir.appendingPathComponent("test-model")
+        try! fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
+
+        // Pre-create both tokenizer files
+        fm.createFile(atPath: modelDir.appendingPathComponent("tokenizer.json").path, contents: Data("{}".utf8))
+        let configPath = modelDir.appendingPathComponent("tokenizer_config.json")
+        let originalContent = "{\"test\": true}".data(using: .utf8)!
+        fm.createFile(atPath: configPath.path, contents: originalContent)
+
+        let manager = ModelDownloadManager()
+        await manager.ensureTokenizerFiles(in: modelDir)
+
+        // File should be unchanged (not overwritten)
+        let data = try! Data(contentsOf: configPath)
+        XCTAssertEqual(data, originalContent, "Existing file should not be modified")
+    }
+
     // MARK: - refreshDownloadedModels
 
     func testRefreshDownloadedModelsFiltersAvailable() {
@@ -174,5 +222,162 @@ final class ModelDownloadManagerTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: path.path),
                           "\(model.name) reported as downloaded but doesn't exist")
         }
+    }
+
+    // MARK: - Model selection (injected base directory)
+
+    private func makeManager() -> ModelDownloadManager {
+        ModelDownloadManager(baseDirectory: tempDir)
+    }
+
+    private func installModel(_ name: String, in manager: ModelDownloadManager) throws {
+        try FileManager.default.createDirectory(
+            at: manager.modelsDirectory.appendingPathComponent(name),
+            withIntermediateDirectories: true
+        )
+    }
+
+    func test_recommendedModel_isLargeV3Turbo() {
+        XCTAssertEqual(ModelDownloadManager.recommendedModel.name, "openai_whisper-large-v3-v20240930_turbo")
+        XCTAssertEqual(ModelDownloadManager.recommendedModel.variant, "large-v3-v20240930_turbo")
+    }
+
+    func test_bestAvailableModelPath_turboPrewarmedAndLargeInstalled_prefersTurbo() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3", in: manager)
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+        manager.markPrewarmed(ModelDownloadManager.recommendedModel)
+
+        XCTAssertEqual(
+            manager.bestAvailableModelPath().map { URL(fileURLWithPath: $0).lastPathComponent },
+            "openai_whisper-large-v3-v20240930_turbo"
+        )
+    }
+
+    func test_bestAvailableModelPath_onlyLargeInstalled_returnsLarge() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3", in: manager)
+
+        XCTAssertEqual(
+            manager.bestAvailableModelPath().map { URL(fileURLWithPath: $0).lastPathComponent },
+            "openai_whisper-large-v3"
+        )
+    }
+
+    func test_bestAvailableModelPath_noModels_returnsNil() {
+        XCTAssertNil(makeManager().bestAvailableModelPath())
+    }
+
+    func test_refreshDownloadedModels_onlyTurboInstalled_doesNotReportLargeV3() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+
+        manager.refreshDownloadedModels()
+
+        XCTAssertEqual(manager.downloadedModels.map(\.name), ["openai_whisper-large-v3-v20240930_turbo"])
+    }
+
+    func test_isInstalled_recommendedModelMissing_returnsFalse() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3", in: manager)
+
+        XCTAssertFalse(manager.isInstalled(ModelDownloadManager.recommendedModel))
+    }
+
+    func test_huggingFaceRepoId_turboVariants_mapsToLargeV3Tokenizer() {
+        XCTAssertEqual(ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3-v20240930_turbo"),
+                       "openai/whisper-large-v3")
+        XCTAssertEqual(ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3-v20240930_turbo_632MB"),
+                       "openai/whisper-large-v3")
+        XCTAssertEqual(ModelDownloadManager.huggingFaceRepoId(from: "openai_whisper-large-v3_947MB"),
+                       "openai/whisper-large-v3")
+    }
+
+    func test_missingTokenizerFiles_noneExist_returnsBothFiles() throws {
+        let modelDir = tempDir.appendingPathComponent("model-a")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+
+        XCTAssertEqual(ModelDownloadManager.missingTokenizerFiles(in: modelDir), ["tokenizer.json", "tokenizer_config.json"])
+    }
+
+    func test_missingTokenizerFiles_configOnly_returnsTokenizerJson() throws {
+        let modelDir = tempDir.appendingPathComponent("model-b")
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: modelDir.appendingPathComponent("tokenizer_config.json").path, contents: Data("{}".utf8))
+
+        XCTAssertEqual(ModelDownloadManager.missingTokenizerFiles(in: modelDir), ["tokenizer.json"])
+    }
+
+    // MARK: - installDownloadedModel (atomic install)
+
+    func test_installDownloadedModel_movesStagedFolderIntoModelsDirectory() throws {
+        let fm = FileManager.default
+        let staged = tempDir.appendingPathComponent(".staging/whisperkit-coreml/model-x")
+        try fm.createDirectory(at: staged, withIntermediateDirectories: true)
+        fm.createFile(atPath: staged.appendingPathComponent("config.json").path, contents: Data("{}".utf8))
+        let modelsDir = tempDir.appendingPathComponent("models/argmaxinc/whisperkit-coreml")
+
+        try ModelDownloadManager.installDownloadedModel(at: staged, as: "model-x", into: modelsDir)
+
+        XCTAssertTrue(fm.fileExists(atPath: modelsDir.appendingPathComponent("model-x/config.json").path))
+        XCTAssertFalse(fm.fileExists(atPath: staged.path))
+    }
+
+    func test_installDownloadedModel_replacesExistingFolder() throws {
+        let fm = FileManager.default
+        let modelsDir = tempDir.appendingPathComponent("models")
+        let existing = modelsDir.appendingPathComponent("model-y")
+        try fm.createDirectory(at: existing, withIntermediateDirectories: true)
+        fm.createFile(atPath: existing.appendingPathComponent("stale.bin").path, contents: Data())
+        let staged = tempDir.appendingPathComponent("staged-y")
+        try fm.createDirectory(at: staged, withIntermediateDirectories: true)
+        fm.createFile(atPath: staged.appendingPathComponent("fresh.bin").path, contents: Data())
+
+        try ModelDownloadManager.installDownloadedModel(at: staged, as: "model-y", into: modelsDir)
+
+        XCTAssertTrue(fm.fileExists(atPath: existing.appendingPathComponent("fresh.bin").path))
+        XCTAssertFalse(fm.fileExists(atPath: existing.appendingPathComponent("stale.bin").path))
+    }
+
+    // MARK: - Prewarm gating
+
+    func test_bestAvailableModelPath_turboNotPrewarmed_prefersLargeV3() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3", in: manager)
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+
+        XCTAssertEqual(
+            manager.bestAvailableModelPath().map { URL(fileURLWithPath: $0).lastPathComponent },
+            "openai_whisper-large-v3"
+        )
+    }
+
+    func test_bestAvailableModelPath_onlyTurboInstalledNotPrewarmed_returnsTurbo() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+
+        XCTAssertEqual(
+            manager.bestAvailableModelPath().map { URL(fileURLWithPath: $0).lastPathComponent },
+            "openai_whisper-large-v3-v20240930_turbo"
+        )
+    }
+
+    func test_markPrewarmed_installedModel_isPrewarmedReturnsTrue() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+        XCTAssertFalse(manager.isPrewarmed(ModelDownloadManager.recommendedModel))
+
+        manager.markPrewarmed(ModelDownloadManager.recommendedModel)
+
+        XCTAssertTrue(manager.isPrewarmed(ModelDownloadManager.recommendedModel))
+    }
+
+    func test_markPrewarmed_byFolder_isPrewarmedReturnsTrue() throws {
+        let manager = makeManager()
+        try installModel("openai_whisper-large-v3-v20240930_turbo", in: manager)
+
+        ModelDownloadManager.markPrewarmed(modelFolder: manager.modelsDirectory.appendingPathComponent("openai_whisper-large-v3-v20240930_turbo"))
+
+        XCTAssertTrue(manager.isPrewarmed(ModelDownloadManager.recommendedModel))
     }
 }

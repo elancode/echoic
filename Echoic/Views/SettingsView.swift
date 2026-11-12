@@ -33,12 +33,15 @@ struct SettingsView: View {
 struct GeneralSettingsTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showConsentReminder") private var showConsentReminder = true
+    @AppStorage(MeetingDetector.settingsKey) private var detectMeetings = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                 Toggle("Show recording consent reminder", isOn: $showConsentReminder)
+                Toggle("Offer to start and stop recording with meetings", isOn: $detectMeetings)
+                    .help("Prompts when another app starts or stops using your microphone.")
             }
 
             Divider()
@@ -165,7 +168,7 @@ struct APISettingsTab: View {
 // MARK: - Audio
 
 struct AudioSettingsTab: View {
-    @AppStorage("enableMicrophone") private var enableMicrophone = false
+    @AppStorage(MeetingCoordinator.microphoneSettingKey) private var enableMicrophone = true
     @State private var inputDevices: [(id: AudioDeviceID, name: String)] = []
     @State private var selectedDevice: AudioDeviceID?
     var body: some View {
@@ -196,7 +199,7 @@ struct AudioSettingsTab: View {
                 Text("Microphone")
                     .fontWeight(.medium)
 
-                Toggle("Enable microphone for speaker identification", isOn: $enableMicrophone)
+                Toggle("Transcribe my microphone", isOn: $enableMicrophone)
 
                 if enableMicrophone {
                     Picker("Input Device", selection: $selectedDevice) {
@@ -208,7 +211,7 @@ struct AudioSettingsTab: View {
                     .frame(maxWidth: 300)
                 }
 
-                Text("Used to identify you as a speaker. Mic audio is never uploaded.")
+                Text("System audio only contains the other participants. Turn this on to also transcribe your side of the call, labeled \"You\". Mic audio stays on this Mac and is never uploaded.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -225,7 +228,7 @@ struct AudioSettingsTab: View {
 // MARK: - Models
 
 struct ModelSettingsTab: View {
-    @StateObject private var modelManager = ModelDownloadManager()
+    @ObservedObject private var modelManager = ModelDownloadManager.shared
     @AppStorage("summarizationModel") private var summarizationModel = "claude-sonnet-4-6"
 
     private static let availableSummarizationModels = [
