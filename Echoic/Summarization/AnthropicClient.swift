@@ -135,6 +135,8 @@ struct SummaryResponse: Codable {
     let decisions: [Decision]
     let actionItems: [ActionItem]
     let notableQuotes: [NotableQuote]?
+    /// Names inferred for diarized speakers, keyed by speaker label (e.g. "speaker_1").
+    let speakerNames: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case title
@@ -146,6 +148,7 @@ struct SummaryResponse: Codable {
         case decisions
         case actionItems = "action_items"
         case notableQuotes = "notable_quotes"
+        case speakerNames = "speaker_names"
     }
 
     struct Decision: Codable {

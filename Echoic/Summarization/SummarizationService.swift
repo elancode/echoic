@@ -38,8 +38,11 @@ final class SummarizationService {
         // Store in database
         try await storeSummary(response: response, meetingId: meetingId)
 
-        // Update meeting title if we got a better one
+        // Update meeting title and name speakers identified in the transcript
         try await databaseWriter.write { db in
+            if let names = response.speakerNames {
+                try SpeakerNaming.apply(names: names, meetingId: meetingId, db: db)
+            }
             if var meeting = try Meeting.fetchOne(db, key: meetingId) {
                 meeting.title = response.title
                 try meeting.update(db)

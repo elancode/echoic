@@ -14,6 +14,7 @@ enum SummaryPromptTemplate {
           "title": "Brief descriptive title for the meeting",
           "meeting_type": "e.g., interview loop, product review, standup, brainstorm, 1:1, all-hands",
           "participants": "List speakers and, where inferable, their roles or affiliations",
+          "speaker_names": {"speaker_1": "First name (or full name) of this speaker"},
           "duration_tone": "Brief characterization, e.g. '45-min product walkthrough, collaborative tone'",
           "executive_summary": "2-3 sentence high-level summary",
           "detailed_summary": "Multi-paragraph summary broken down by topic. Each paragraph covers a distinct topic with a bold topic heading. Attribute key points to specific speakers. Preserve disagreements — capture both sides, don't flatten into false consensus. Use \\n\\n between paragraphs.",
@@ -37,7 +38,10 @@ enum SummaryPromptTemplate {
         - Keep it focused: target ~500-800 words for the detailed_summary. Shorter meetings get shorter summaries.
         - Pull 2-3 notable quotes — sharp or memorable moments that reveal strategy, philosophy, or hard-won lessons.
         - If no decisions/action items/quotes exist, use empty arrays.
-        - Use speaker labels exactly as they appear in the transcript.
+        - Use speaker labels exactly as they appear in the transcript (in decisions, action_items, notable_quotes).
+        - speaker_names maps transcript speaker labels to people's names. Include a label only when the \
+        transcript makes the name clear (introductions, being addressed by name, self-reference). \
+        Omit labels you can't name confidently; never guess. Omit "You". Use {} if none are known.
         - Timestamps should be in milliseconds.
         """
 

@@ -74,7 +74,7 @@ enum SpeakerMerge {
     }
 
     /// Returns a default label for a speaker ID.
-    private static func defaultLabel(for speakerId: String) -> String {
+    static func defaultLabel(for speakerId: String) -> String {
         if speakerId == TranscriptSegment.localSpeakerId { return "You" }
 
         // "speaker_1" → "Speaker 1"

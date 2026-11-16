@@ -13,6 +13,8 @@ struct MeetingDetailView: View {
     @State private var segments: [TranscriptSegment] = []
     @State private var summary: Summary?
     @State private var summaryResponse: SummaryResponse?
+    /// Speaker display labels keyed by speaker ID (names inferred by summarization).
+    @State private var speakerLabels: [String: String] = [:]
     @State private var copiedTranscript = false
     @State private var copiedSummary = false
 
@@ -91,7 +93,7 @@ struct MeetingDetailView: View {
                 }
 
                 ScrollView {
-                    Text(Self.buildTranscriptText(from: segments))
+                    Text(Self.buildTranscriptText(from: segments, labels: speakerLabels))
                         .font(.body)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,7 +172,7 @@ struct MeetingDetailView: View {
                                 VStack(alignment: .leading) {
                                     Text(decision.decision)
                                         .textSelection(.enabled)
-                                    if let speaker = decision.speaker {
+                                    if let speaker = SpeakerNaming.resolve(decision.speaker, labels: speakerLabels) {
                                         Text(speaker)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
@@ -191,7 +193,7 @@ struct MeetingDetailView: View {
                                     Text(item.task)
                                         .textSelection(.enabled)
                                     HStack {
-                                        if let owner = item.owner {
+                                        if let owner = SpeakerNaming.resolve(item.owner, labels: speakerLabels) {
                                             Text(owner)
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
@@ -216,7 +218,7 @@ struct MeetingDetailView: View {
                                     .italic()
                                     .textSelection(.enabled)
                                 HStack {
-                                    if let speaker = quote.speaker {
+                                    if let speaker = SpeakerNaming.resolve(quote.speaker, labels: speakerLabels) {
                                         Text("— \(speaker)")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
@@ -251,7 +253,10 @@ struct MeetingDetailView: View {
     /// Builds transcript text, grouping consecutive segments by speaker.
     /// When speakers differ, inserts a blank line and a speaker label.
     /// When no speaker IDs exist, just joins all text with spaces.
-    static func buildTranscriptText(from segments: [TranscriptSegment]) -> Swift.String {
+    static func buildTranscriptText(
+        from segments: [TranscriptSegment],
+        labels: [Swift.String: Swift.String] = [:]
+    ) -> Swift.String {
         let hasSpeakers = segments.contains { $0.speakerId != nil }
         guard hasSpeakers else {
             return segments.map(\.text).joined(separator: " ")
@@ -262,7 +267,7 @@ struct MeetingDetailView: View {
         var currentTexts: [Swift.String] = []
 
         for segment in segments {
-            let speaker = segment.speakerDisplayName
+            let speaker = segment.speakerId.flatMap { labels[$0] } ?? segment.speakerDisplayName
             if speaker != currentSpeaker {
                 // Flush previous speaker's text
                 if !currentTexts.isEmpty {
@@ -285,7 +290,7 @@ struct MeetingDetailView: View {
     }
 
     private func copyTranscript() {
-        let transcriptText: Swift.String = Self.buildTranscriptText(from: segments)
+        let transcriptText: Swift.String = Self.buildTranscriptText(from: segments, labels: speakerLabels)
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -298,7 +303,7 @@ struct MeetingDetailView: View {
 
     private func copySummary() {
         guard let response = summaryResponse else { return }
-        let text = Self.buildSummaryText(from: response)
+        let text = Self.buildSummaryText(from: response, labels: speakerLabels)
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -309,7 +314,10 @@ struct MeetingDetailView: View {
         }
     }
 
-    static func buildSummaryText(from response: SummaryResponse) -> Swift.String {
+    static func buildSummaryText(
+        from response: SummaryResponse,
+        labels: [Swift.String: Swift.String] = [:]
+    ) -> Swift.String {
         var parts: [Swift.String] = []
 
         if let type = response.meetingType {
@@ -331,7 +339,7 @@ struct MeetingDetailView: View {
             parts.append("")
             parts.append("Decisions:")
             for d in response.decisions {
-                let speaker = d.speaker.map { " (\($0))" } ?? ""
+                let speaker = SpeakerNaming.resolve(d.speaker, labels: labels).map { " (\($0))" } ?? ""
                 parts.append("- \(d.decision)\(speaker)")
             }
         }
@@ -341,7 +349,7 @@ struct MeetingDetailView: View {
             parts.append("Action Items:")
             for item in response.actionItems {
                 var line = "- \(item.task)"
-                if let owner = item.owner { line += " [\(owner)]" }
+                if let owner = SpeakerNaming.resolve(item.owner, labels: labels) { line += " [\(owner)]" }
                 if let due = item.due { line += " (Due: \(due))" }
                 parts.append(line)
             }
@@ -352,7 +360,7 @@ struct MeetingDetailView: View {
             parts.append("Notable Quotes:")
             for q in quotes {
                 var line = "- \"\(q.quote)\""
-                if let speaker = q.speaker { line += " — \(speaker)" }
+                if let speaker = SpeakerNaming.resolve(q.speaker, labels: labels) { line += " — \(speaker)" }
                 parts.append(line)
             }
         }
@@ -369,6 +377,10 @@ struct MeetingDetailView: View {
                 .order(TranscriptSegment.Columns.startMs)
                 .fetchAll(dbConn)
         }) ?? []
+
+        speakerLabels = (try? db.read { dbConn in
+            try SpeakerNaming.labels(meetingId: meeting.id, db: dbConn)
+        }) ?? [:]
 
         summary = try? db.read { dbConn in
             try Summary.fetchOne(dbConn, key: meeting.id)
