@@ -49,7 +49,7 @@ enum MeetingChunker {
         Each partial summary covers a 90-minute segment of a long meeting.
 
         Combine them into a single structured JSON summary using the same schema. \
-        Merge duplicate decisions and action items. Resolve any contradictions by preferring later segments. \
+        Merge duplicate decisions and action items. Merge speaker_names from all parts. Resolve any contradictions by preferring later segments. \
         Produce a unified executive summary that covers the entire meeting.
 
         Output ONLY valid JSON.

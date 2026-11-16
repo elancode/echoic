@@ -27,4 +27,26 @@ final class MeetingDetectorTests: XCTestCase {
 
         XCTAssertEqual(text.body, "Your microphone is no longer in use. Should Echoic stop recording?")
     }
+
+    func test_autoStopNotificationText_withAppName_saysRecordingStopped() {
+        let text = MeetingDetector.autoStopNotificationText(appName: "Zoom")
+
+        XCTAssertEqual(text.title, "Recording stopped")
+        XCTAssertEqual(text.body, "Zoom stopped using your microphone, so Echoic stopped recording.")
+    }
+
+    func test_autoStopNotificationText_withoutAppName_saysCallEnded() {
+        let text = MeetingDetector.autoStopNotificationText(appName: nil)
+
+        XCTAssertEqual(text.body, "Your call ended, so Echoic stopped recording.")
+    }
+
+    func test_isAutoStopEnabled_unset_defaultsToTrue() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+
+        XCTAssertTrue(MeetingDetector.isAutoStopEnabled(defaults: defaults))
+        defaults.set(false, forKey: MeetingDetector.autoStopSettingsKey)
+        XCTAssertFalse(MeetingDetector.isAutoStopEnabled(defaults: defaults))
+    }
 }

@@ -16,6 +16,7 @@
 		194E043CA5AD0F57C8FC552C /* DateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932FDCFC3A64143271C1505C /* DateFormatting.swift */; };
 		1A46F79D324610DD4241B083 /* TranscriptDeduplicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13F2F205B76255DB0DE1814 /* TranscriptDeduplicatorTests.swift */; };
 		1B957CD305866F8D3BA5C088 /* Summary.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD496C2C98DEE8B18DA77871 /* Summary.swift */; };
+		1C4232943FF912C38504F435 /* SpeakerNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6668AA3D3917F67001AF0251 /* SpeakerNaming.swift */; };
 		24F20D407056BB68EA5B6E87 /* MeetingEndDetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A75796DF8AD018AC9E0DB4E /* MeetingEndDetectionPolicy.swift */; };
 		256DEED3C18F4B4C37FA6B6E /* RingBufferTranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4421C6C3918BEDE5542852D3 /* RingBufferTranscriptionTests.swift */; };
 		2D9F2CCB7EECB459FDFCE454 /* RingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65AD669508BECF155193B20 /* RingBufferTests.swift */; };
@@ -62,6 +63,7 @@
 		B6818D1403A321E4A79800BF /* CrossTalkFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F784D8C1FA576CC9F54C498C /* CrossTalkFilterTests.swift */; };
 		B99FB20EEBF41AF97A121734 /* ULIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F9ECF3EC4DFC7F5017C7DA /* ULIDTests.swift */; };
 		BC041C41666B2AB8E7F5D2BA /* ModelDownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC022000F5EB584B6719D2CA /* ModelDownloadManagerTests.swift */; };
+		BD24D51D9AB3182DE4DA30E5 /* SpeakerNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA18725BBA02B042104AC1F /* SpeakerNamingTests.swift */; };
 		C43D34816CDE7A6FFBC47228 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27D7FDCE2503AE5CDFB5AA2 /* OnboardingView.swift */; };
 		C5A5A0E6643F6E1952282C19 /* EchoicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34F20440B8A0E8C411992FC /* EchoicApp.swift */; };
 		C6C0C6EE8ED80AD00991A15D /* MeetingSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E803BB7495CB6E64488D380 /* MeetingSpeaker.swift */; };
@@ -110,6 +112,7 @@
 		345C91774A1882559715CE9A /* TranscriptSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegment.swift; sourceTree = "<group>"; };
 		38BC7042C84DA75D63A80284 /* SummaryPromptTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryPromptTemplate.swift; sourceTree = "<group>"; };
 		3C65726B17C35EB3A87820C0 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		3DA18725BBA02B042104AC1F /* SpeakerNamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerNamingTests.swift; sourceTree = "<group>"; };
 		4421C6C3918BEDE5542852D3 /* RingBufferTranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingBufferTranscriptionTests.swift; sourceTree = "<group>"; };
 		4CD27AC7D03564D24D6CE45C /* ConsentReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentReminderService.swift; sourceTree = "<group>"; };
 		51F9ECF3EC4DFC7F5017C7DA /* ULIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ULIDTests.swift; sourceTree = "<group>"; };
@@ -117,6 +120,7 @@
 		59A467B9750D50E3E16F12DB /* TranscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceTests.swift; sourceTree = "<group>"; };
 		5DA255E9F8D5FCF488C78C46 /* IntelFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelFallback.swift; sourceTree = "<group>"; };
 		60BEC91F1C61545CEEEC87E6 /* LiveTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptView.swift; sourceTree = "<group>"; };
+		6668AA3D3917F67001AF0251 /* SpeakerNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerNaming.swift; sourceTree = "<group>"; };
 		69ECB8308AD4C4C2D4C99799 /* TranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionStore.swift; sourceTree = "<group>"; };
 		6DC75B223703BB43F747DD3B /* MeetingDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetectorTests.swift; sourceTree = "<group>"; };
 		6F20060FBAA32BCDBB737BA3 /* RetryHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryHandler.swift; sourceTree = "<group>"; };
@@ -201,6 +205,7 @@
 				2CEA8A9262D172ABACA88C07 /* DiarizationService.swift */,
 				9C46AD228204F7BFD8C3D456 /* LocalSpeakerIdentifier.swift */,
 				AC6A5446927AF864D2B507DD /* SpeakerMerge.swift */,
+				6668AA3D3917F67001AF0251 /* SpeakerNaming.swift */,
 			);
 			path = Diarization;
 			sourceTree = "<group>";
@@ -309,6 +314,7 @@
 		670ED5748015A2AA37D201BD /* SummarizationTests */ = {
 			isa = PBXGroup;
 			children = (
+				3DA18725BBA02B042104AC1F /* SpeakerNamingTests.swift */,
 				8BC5C4D0F8F21CA0F33267D7 /* SummarizationTests.swift */,
 			);
 			path = SummarizationTests;
@@ -562,6 +568,7 @@
 				2D9F2CCB7EECB459FDFCE454 /* RingBufferTests.swift in Sources */,
 				256DEED3C18F4B4C37FA6B6E /* RingBufferTranscriptionTests.swift in Sources */,
 				F3A29A75B7A70C298B2F51A9 /* SpeakerMergeTests.swift in Sources */,
+				BD24D51D9AB3182DE4DA30E5 /* SpeakerNamingTests.swift in Sources */,
 				4B61288879C0359303CF1A31 /* SummarizationTests.swift in Sources */,
 				54B53BD4039BC55F7E51DBA1 /* TranscriptCleaningTests.swift in Sources */,
 				1A46F79D324610DD4241B083 /* TranscriptDeduplicatorTests.swift in Sources */,
@@ -612,6 +619,7 @@
 				03F80F13D6C125DFE328055C /* RingBuffer.swift in Sources */,
 				45CE109A2C173E690A3A2642 /* SettingsView.swift in Sources */,
 				4F3993383B9F61BA082F27F5 /* SpeakerMerge.swift in Sources */,
+				1C4232943FF912C38504F435 /* SpeakerNaming.swift in Sources */,
 				B61267378B9655B7C27D6C9D /* SummarizationService.swift in Sources */,
 				1B957CD305866F8D3BA5C088 /* Summary.swift in Sources */,
 				0765C86F7034202D46742124 /* SummaryPromptTemplate.swift in Sources */,

@@ -72,6 +72,9 @@
 - [x] **T50** · Transcribe the user's mic as a separate "You" track in System Audio mode (cross-talk filter, resampling, silence gate) · **M** · blocked-by: T49
 - [ ] **T51** · Handle input device changes mid-recording (e.g. AirPods connecting) — AVAudioEngine stops on configuration change · **S**
 - [ ] **T52** · Settings → Audio input device picker is not persisted or used · **S**
+- [x] **T53** · Show speaker names inferred by the summary in the transcript and summary (`speaker_names` → meetingSpeaker labels) · **S**
+- [x] **T54** · Automatically stop recording when the call app releases the mic (setting, on by default) · **S**
+- [ ] **T55** · Backfill speaker names for meetings summarized before T53 (re-summarize or parse `participants`) · **S** · blocked-by: T53
 
 ---
 
@@ -122,3 +125,5 @@
 - [x] **T47** · Tests use real app migrations (fixes 5 failures from missing `meeting.processed`) · completed 2026-11-10
 - [x] **T49** · Performance: large-v3 turbo + model lifecycle + low-priority inference · completed 2026-11-10
 - [x] **T50** · Mic transcribed as separate "You" track · completed 2026-11-10
+- [x] **T53** · Speaker names from summary shown in transcript · completed 2026-11-16
+- [x] **T54** · Auto-stop recording when call ends · completed 2026-11-16
