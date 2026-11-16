@@ -20,6 +20,7 @@ final class MeetingDetector: ObservableObject {
     static let shared = MeetingDetector()
 
     static let settingsKey = "detectMeetings"
+    static let autoStopSettingsKey = "autoStopRecordingWhenCallEnds"
 
     enum NotificationIds {
         static let startCategory = "MEETING_DETECTED"
@@ -29,6 +30,7 @@ final class MeetingDetector: ObservableObject {
         static let dismissAction = "DISMISS"
         static let startRequest = "meeting-detected"
         static let stopRequest = "meeting-ended"
+        static let autoStopRequest = "recording-auto-stopped"
     }
 
     /// The prompt currently being offered, if any.
@@ -61,6 +63,12 @@ final class MeetingDetector: ObservableObject {
     func stop() {
         monitorTask?.cancel()
         monitorTask = nil
+    }
+
+    /// Whether recording stops on its own when the call ends, instead of
+    /// asking (on by default). Only applies while detection is enabled.
+    nonisolated static func isAutoStopEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: autoStopSettingsKey) as? Bool ?? true
     }
 
     // MARK: - User Responses
@@ -138,6 +146,10 @@ final class MeetingDetector: ObservableObject {
     private func apply(_ action: MeetingDetectionPolicy.Action, prompt newPrompt: MeetingPrompt) {
         switch action {
         case .prompt:
+            if case .stop(let appName) = newPrompt, Self.isAutoStopEnabled() {
+                autoStop(appName: appName)
+                return
+            }
             logger.info("Showing meeting prompt: \(String(describing: newPrompt), privacy: .public)")
             prompt = newPrompt
             if case .start = newPrompt {
@@ -159,6 +171,17 @@ final class MeetingDetector: ObservableObject {
         }
     }
 
+    /// The call ended: stop recording without asking, and say so.
+    private func autoStop(appName: String?) {
+        logger.info("Call ended; stopping recording automatically")
+        endPolicy.promptHandled()
+        Task {
+            await MeetingCoordinator.shared.stopRecording()
+            let text = Self.autoStopNotificationText(appName: appName)
+            await postNotification(title: text.title, body: text.body, requestId: NotificationIds.autoStopRequest)
+        }
+    }
+
     private func hidePrompt() {
         guard let current = prompt else { return }
         switch current {
@@ -172,24 +195,28 @@ final class MeetingDetector: ObservableObject {
     // MARK: - Notifications
 
     private func postNotification(for prompt: MeetingPrompt) async {
+        let text = Self.notificationText(for: prompt)
+        switch prompt {
+        case .start:
+            await postNotification(title: text.title, body: text.body, requestId: NotificationIds.startRequest,
+                                   category: NotificationIds.startCategory)
+        case .stop:
+            await postNotification(title: text.title, body: text.body, requestId: NotificationIds.stopRequest,
+                                   category: NotificationIds.stopCategory)
+        }
+    }
+
+    private func postNotification(title: String, body: String, requestId: String, category: String? = nil) async {
         let center = UNUserNotificationCenter.current()
         // No-op after the first time; asks for permission on first detection.
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
 
-        let text = Self.notificationText(for: prompt)
         let content = UNMutableNotificationContent()
-        content.title = text.title
-        content.body = text.body
+        content.title = title
+        content.body = body
         content.sound = .default
-
-        let requestId: String
-        switch prompt {
-        case .start:
-            content.categoryIdentifier = NotificationIds.startCategory
-            requestId = NotificationIds.startRequest
-        case .stop:
-            content.categoryIdentifier = NotificationIds.stopCategory
-            requestId = NotificationIds.stopRequest
+        if let category {
+            content.categoryIdentifier = category
         }
 
         let request = UNNotificationRequest(identifier: requestId, content: content, trigger: nil)
@@ -212,6 +239,11 @@ final class MeetingDetector: ObservableObject {
                 ?? "Your microphone is no longer in use."
             return ("Meeting ended?", "\(what) Should Echoic stop recording?")
         }
+    }
+
+    nonisolated static func autoStopNotificationText(appName: String?) -> (title: String, body: String) {
+        let what = appName.map { "\($0) stopped using your microphone, so" } ?? "Your call ended, so"
+        return ("Recording stopped", "\(what) Echoic stopped recording.")
     }
 
     private func removeNotification(for prompt: MeetingPrompt) {

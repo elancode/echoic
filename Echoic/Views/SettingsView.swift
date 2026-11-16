@@ -34,6 +34,7 @@ struct GeneralSettingsTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showConsentReminder") private var showConsentReminder = true
     @AppStorage(MeetingDetector.settingsKey) private var detectMeetings = true
+    @AppStorage(MeetingDetector.autoStopSettingsKey) private var autoStopRecording = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -42,6 +43,10 @@ struct GeneralSettingsTab: View {
                 Toggle("Show recording consent reminder", isOn: $showConsentReminder)
                 Toggle("Offer to start and stop recording with meetings", isOn: $detectMeetings)
                     .help("Prompts when another app starts or stops using your microphone.")
+                Toggle("Stop recording automatically when the call ends", isOn: $autoStopRecording)
+                    .padding(.leading, 20)
+                    .disabled(!detectMeetings)
+                    .help("Stops recording about 10 seconds after the call app releases your microphone, instead of asking.")
             }
 
             Divider()
