@@ -234,13 +234,20 @@ struct AudioSettingsTab: View {
 
 struct ModelSettingsTab: View {
     @ObservedObject private var modelManager = ModelDownloadManager.shared
-    @AppStorage("summarizationModel") private var summarizationModel = "claude-sonnet-4-6"
+    @AppStorage(AnthropicClient.summarizationModelKey) private var summarizationModel = AnthropicClient.defaultSummarizationModel
+    @AppStorage(MeetingCoordinator.liveInsightsSettingKey) private var liveInsightsEnabled = true
+    @AppStorage(AnthropicClient.liveInsightsModelKey) private var liveInsightsModel = AnthropicClient.defaultLiveInsightsModel
+
+    private static let availableLiveInsightsModels = [
+        ModelResolver.automatic("opus"),
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+    ]
 
     private static let availableSummarizationModels = [
-        "claude-sonnet-4-6",
-        "claude-opus-4-6",
-        "claude-haiku-4-5",
-        "claude-3-5-sonnet-20241022",
+        ModelResolver.automatic("opus"),
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
     ]
 
     var body: some View {
@@ -298,7 +305,7 @@ struct ModelSettingsTab: View {
 
             Picker("Model", selection: $summarizationModel) {
                 ForEach(Self.availableSummarizationModels, id: \.self) { model in
-                    Text(model).tag(model)
+                    Text(ModelResolver.displayName(for: model)).tag(model)
                 }
             }
             .labelsHidden()
@@ -308,8 +315,44 @@ struct ModelSettingsTab: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
+            Divider()
+
+            LiveInsightsSettings(
+                enabled: $liveInsightsEnabled,
+                model: $liveInsightsModel,
+                availableModels: Self.availableLiveInsightsModels
+            )
+
             Spacer()
         }
         .padding(20)
+    }
+}
+
+private struct LiveInsightsSettings: View {
+    @Binding var enabled: Bool
+    @Binding var model: String
+    let availableModels: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Live insights during meetings", isOn: $enabled)
+                .fontWeight(.medium)
+
+            Picker("Model", selection: $model) {
+                ForEach(availableModels, id: \.self) { model in
+                    Text(ModelResolver.displayName(for: model)).tag(model)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 280)
+            .disabled(!enabled)
+
+            Text("While recording, Claude reads the transcript text every minute or two and shows a recap, "
+                 + "open concerns, and questions. Audio never leaves your Mac.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

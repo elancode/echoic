@@ -75,6 +75,11 @@
 - [x] **T53** · Show speaker names inferred by the summary in the transcript and summary (`speaker_names` → meetingSpeaker labels) · **S**
 - [x] **T54** · Automatically stop recording when the call app releases the mic (setting, on by default) · **S**
 - [ ] **T55** · Backfill speaker names for meetings summarized before T53 (re-summarize or parse `participants`) · **S** · blocked-by: T53
+- [x] **T56** · Live insights agent: running recap, open concerns, and questions in a side panel of the Live Transcript window (rolling-state prompt, adaptive trigger, `liveInsight` table, Settings toggle + model) · **M** · blocked-by: T46
+- [ ] **T57** · Show saved live insights in MeetingDetailView (timeline of snapshots per meeting) · **S** · blocked-by: T56
+- [x] **T58** · Fix post-processing hang: WhisperKit `resampleAudio` loops forever on truncated audio → own 16 kHz loader; rebuild unreadable `audio.m4a` from segments; atomic concatenation · **S**
+- [x] **T59** · Model settings default to "Latest Opus (automatic)" (Models API lookup, 404 → newest in family); read text blocks after thinking blocks · **S** · blocked-by: T56
+- [ ] **T60** · Cap post-processing retries — meetings whose summary keeps failing are retried on every launch · **S**
 
 ---
 

@@ -152,4 +152,33 @@ final class DatabaseManagerTests: XCTestCase {
         XCTAssertTrue(segments.isEmpty)
         XCTAssertNil(summaries)
     }
+
+    func test_migrate_liveInsightTable_roundTripsAndCascadesOnMeetingDelete() throws {
+        let meetingId = "01HTEST000000000000000010"
+        var insight = LiveInsight(
+            meetingId: meetingId,
+            createdAt: 1700000000000,
+            coversUntilMs: 90_000,
+            recap: "Discussing the launch date.",
+            concerns: ["QA capacity unclear"],
+            questions: ["Who owns rollout?", "Is May 3 firm?"]
+        )
+
+        try dbQueue.write { db in
+            try Meeting(id: meetingId, title: "Insights", startedAt: 0, status: .recording).insert(db)
+            try insight.insert(db)
+        }
+
+        let fetched = try dbQueue.read { db in try LiveInsight.fetchAll(db) }
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertNotNil(insight.id)
+        XCTAssertEqual(fetched.first?.questions, ["Who owns rollout?", "Is May 3 firm?"])
+
+        try dbQueue.write { db in
+            _ = try Meeting.deleteOne(db, key: meetingId)
+        }
+
+        let remaining = try dbQueue.read { db in try LiveInsight.fetchCount(db) }
+        XCTAssertEqual(remaining, 0)
+    }
 }

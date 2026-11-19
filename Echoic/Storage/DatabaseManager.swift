@@ -151,6 +151,21 @@ final class DatabaseManager {
             try db.execute(sql: "UPDATE meeting SET processed = 1 WHERE status = 'ready'")
         }
 
+        migrator.registerMigration("v3_live_insights") { db in
+            try db.create(table: "liveInsight") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("meetingId", .text)
+                    .notNull()
+                    .indexed()
+                    .references("meeting", onDelete: .cascade)
+                t.column("createdAt", .integer).notNull()
+                t.column("coversUntilMs", .integer).notNull()
+                t.column("recap", .text).notNull()
+                t.column("concerns", .text).notNull() // JSON array of strings
+                t.column("questions", .text).notNull() // JSON array of strings
+            }
+        }
+
         try migrator.migrate(writer)
     }
 

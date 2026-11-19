@@ -64,7 +64,7 @@ enum SummaryPromptTemplate {
     }
 
     /// Formats milliseconds as [HH:MM:SS].
-    private static func formatTimestamp(ms: Int64) -> String {
+    static func formatTimestamp(ms: Int64) -> String {
         let totalSeconds = ms / 1000
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
