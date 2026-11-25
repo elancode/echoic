@@ -96,7 +96,8 @@ struct EchoicApp: App {
         Window("Settings", id: "settings") {
             SettingsView()
         }
-        .defaultSize(width: 500, height: 350)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
 
         Window("Meeting Library", id: "library") {
             MeetingLibraryView()
