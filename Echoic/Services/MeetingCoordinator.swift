@@ -399,6 +399,8 @@ final class MeetingCoordinator: ObservableObject {
     // MARK: - Segment Handling
 
     private func handleNewSegment(_ segment: TranscriptSegment) {
+        // A chunk can finish after its meeting ended; never mix it into another meeting.
+        guard segment.meetingId == currentMeeting?.id else { return }
         do {
             // Only surface segments that were actually stored (not deduplicated),
             // so the live transcript matches what's persisted.
