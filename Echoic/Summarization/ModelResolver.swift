@@ -3,38 +3,36 @@ import os.log
 
 private let logger = Logger(subsystem: "com.echoic.app", category: "ModelResolver")
 
-/// Turns a model setting into a concrete Anthropic model ID.
+/// Turns a model setting into a concrete model ID for the current provider.
 ///
-/// The API has no "latest" alias, and models are retired over time, so a hard-coded
-/// ID eventually stops working. A setting of `auto:<family>` (e.g. `auto:opus`) resolves
-/// to the newest model in that family via the Models API, cached for a day. Concrete IDs
-/// pass through unchanged.
+/// There is no "latest" alias, and models are retired over time, so a hard-coded ID
+/// eventually stops working. A setting of `auto:<family>` (e.g. `auto:opus`) resolves to
+/// the newest model in that family the provider offers, cached for a day per provider.
+/// Concrete IDs pass through unchanged.
 final class ModelResolver {
     static let automaticPrefix = "auto:"
-    /// Used when the Models API can't be reached and nothing is cached yet.
-    static let builtInDefaults = [
-        "opus": "claude-opus-5-5",
-        "sonnet": "claude-sonnet-5-5",
-        "haiku": "claude-haiku-5-5",
-    ]
+    /// Used on the Claude API when the Models API can't be reached and nothing is cached yet.
+    static let builtInDefaults = AnthropicAPIProvider.builtInDefaults
 
-    private let session: URLSession
+    private let provider: ClaudeProvider
     private let defaults: UserDefaults
-    private let apiKey: () throws -> String
     private let now: () -> Date
     private let cacheLifetime: TimeInterval = 24 * 60 * 60
-    private let modelsURL = "https://api.anthropic.com/v1/models?limit=1000"
 
-    init(
+    init(provider: ClaudeProvider, defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
+        self.provider = provider
+        self.defaults = defaults
+        self.now = now
+    }
+
+    /// Claude API resolver (kept for callers and tests that pass a session and key).
+    convenience init(
         session: URLSession = .shared,
         defaults: UserDefaults = .standard,
         apiKey: @escaping () throws -> String = KeychainService.retrieveAPIKey,
         now: @escaping () -> Date = Date.init
     ) {
-        self.session = session
-        self.defaults = defaults
-        self.apiKey = apiKey
-        self.now = now
+        self.init(provider: AnthropicAPIProvider(session: session, apiKey: apiKey), defaults: defaults, now: now)
     }
 
     /// The setting value meaning "always the newest model in this family".
@@ -48,20 +46,28 @@ final class ModelResolver {
         return "Latest \(family.capitalized) (automatic)"
     }
 
-    /// The family ("opus", "sonnet", "haiku") of a setting or a concrete ID like `claude-opus-5-5`.
+    /// The family ("opus", "sonnet", "haiku") of a setting, a Claude API ID like
+    /// `claude-opus-5-5`, or a Bedrock ID like `us.anthropic.claude-opus-5-5-v1:0`.
     static func family(of model: String) -> String? {
         if model.hasPrefix(automaticPrefix) {
             return String(model.dropFirst(automaticPrefix.count))
         }
-        let parts = model.split(separator: "-")
+        let name = model.split(separator: ".").first { $0.hasPrefix("claude-") }.map(String.init) ?? model
+        let parts = name.split(separator: "-")
         guard parts.count >= 2, parts[0] == "claude" else { return nil }
         let family = String(parts[1])
         return builtInDefaults[family] == nil ? nil : family
     }
 
-    /// Resolves a setting to a concrete model ID. Never throws: falls back to the cached
-    /// value, then to the built-in default for the family.
-    func resolve(_ setting: String, forceRefresh: Bool = false) async -> String {
+    /// Resolves a setting to a concrete model ID: the newest model, else the cached
+    /// value, else the provider's built-in default. Nil only when none of those exist
+    /// (e.g. Bedrock before its first successful lookup).
+    func resolve(_ setting: String, forceRefresh: Bool = false) async -> String? {
+        // A Claude API ID picked in Settings (e.g. `claude-opus-5-5`) means "this family"
+        // on providers with their own IDs.
+        if !provider.acceptsClaudeAPIModelIDs, setting.hasPrefix("claude-"), let family = Self.family(of: setting) {
+            return await resolve(Self.automatic(family), forceRefresh: forceRefresh)
+        }
         guard setting.hasPrefix(Self.automaticPrefix), let family = Self.family(of: setting) else {
             return setting
         }
@@ -73,7 +79,7 @@ final class ModelResolver {
         }
 
         do {
-            if let newest = try await newestModel(in: family) {
+            if let newest = try await provider.newestModel(in: family) {
                 defaults.set(newest, forKey: cacheKey(family))
                 defaults.set(now(), forKey: cacheDateKey(family))
                 return newest
@@ -81,44 +87,14 @@ final class ModelResolver {
         } catch {
             logger.error("Model lookup failed: \(error.localizedDescription, privacy: .public)")
         }
-        return cached ?? Self.builtInDefaults[family] ?? setting
+        return cached ?? provider.builtInModel(for: family)
     }
 
-    // MARK: - Private
-
-    private struct ModelList: Decodable {
-        struct Model: Decodable {
-            let id: String
-            let createdAt: String?
-
-            enum CodingKeys: String, CodingKey {
-                case id
-                case createdAt = "created_at"
-            }
-        }
-        let data: [Model]
+    // Claude API entries keep their original keys so existing caches stay valid.
+    private var namespace: String {
+        provider.cacheNamespace == "anthropic" ? "" : "\(provider.cacheNamespace)."
     }
 
-    private func newestModel(in family: String) async throws -> String? {
-        guard let url = URL(string: modelsURL) else { throw AnthropicError.invalidURL }
-        var request = URLRequest(url: url)
-        request.setValue(try apiKey(), forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw AnthropicError.invalidResponse }
-        guard http.statusCode == 200 else {
-            throw AnthropicError.httpError(statusCode: http.statusCode, body: String(data: data, encoding: .utf8))
-        }
-
-        let prefix = "claude-\(family)-"
-        return try JSONDecoder().decode(ModelList.self, from: data).data
-            .filter { $0.id.hasPrefix(prefix) && !$0.id.hasSuffix("-fast") }
-            // RFC 3339 timestamps sort chronologically as strings
-            .max { ($0.createdAt ?? "") < ($1.createdAt ?? "") }?
-            .id
-    }
-
-    private func cacheKey(_ family: String) -> String { "resolvedModel.\(family)" }
-    private func cacheDateKey(_ family: String) -> String { "resolvedModel.\(family).date" }
+    private func cacheKey(_ family: String) -> String { "resolvedModel.\(namespace)\(family)" }
+    private func cacheDateKey(_ family: String) -> String { "resolvedModel.\(namespace)\(family).date" }
 }

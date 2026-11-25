@@ -178,7 +178,7 @@ private struct LiveInsightsEmptyState: View {
     private var message: String {
         switch status {
         case .needsAPIKey:
-            return "Add an Anthropic API key in Settings to get live insights."
+            return "Set up Claude in Settings → Claude to get live insights."
         case .disabled:
             return "Insights appear here while a meeting is being recorded."
         case .waiting, .updating:

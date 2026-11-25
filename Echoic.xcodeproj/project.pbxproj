@@ -27,6 +27,7 @@
 		256DEED3C18F4B4C37FA6B6E /* RingBufferTranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4421C6C3918BEDE5542852D3 /* RingBufferTranscriptionTests.swift */; };
 		25B633F29990CE30BAFF4943 /* MeetingAnnotationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034FFF8CDDCDCAE80CE74A7A /* MeetingAnnotationsTests.swift */; };
 		25EA729769E7A42CB96E8F26 /* JetBrainsMono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7C9662097B21DFA9DA5FA6ED /* JetBrainsMono-OFL.txt */; };
+		294FAD2811918EC88906E057 /* AWSBedrockRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = AC7026109A03F86E10672163 /* AWSBedrockRuntime */; };
 		2D9F2CCB7EECB459FDFCE454 /* RingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65AD669508BECF155193B20 /* RingBufferTests.swift */; };
 		3071D3EDE7FD170A81AA9177 /* CallPromptRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F099FCC104F774C963C7751 /* CallPromptRouterTests.swift */; };
 		31C7B2959A6BA2831AB73508 /* MicrophoneActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B92BEDB6D14F53A4F90319E /* MicrophoneActivityMonitor.swift */; };
@@ -42,10 +43,12 @@
 		489D84724A80B794196275CD /* ModelResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28261E8ECF2F12EA58F2E4A0 /* ModelResolverTests.swift */; };
 		48CC004F158E4134B38E03F4 /* LiveInsightPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F288B29F7DCF84EA89F4DF8E /* LiveInsightPromptTests.swift */; };
 		4B61288879C0359303CF1A31 /* SummarizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC5C4D0F8F21CA0F33267D7 /* SummarizationTests.swift */; };
+		4BA1988F0A0F724C51C44EFE /* BedrockProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6023DCD64C903143CDB686A7 /* BedrockProviderTests.swift */; };
 		4C0896D13AAFD49CB1C7211A /* TranscriptSegmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 589E1F27F3510304B5BC259C /* TranscriptSegmentTests.swift */; };
 		4E79DEA03B286F0D7935ED1B /* AnthropicClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6A1EFB9D614D8FCAF228F0 /* AnthropicClient.swift */; };
 		4F3993383B9F61BA082F27F5 /* SpeakerMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6A5446927AF864D2B507DD /* SpeakerMerge.swift */; };
 		4FB6BF2768C6637C76BE9D79 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 205D219D973970C79B2C8F7C /* FlowLayout.swift */; };
+		50724425776D12512AE57E04 /* BedrockProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB2F761A9C665F588AD5FBE /* BedrockProvider.swift */; };
 		51DC4D71F3F38EE551DA2BB6 /* DatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D119DE2DA36D2491DC3AD8 /* DatabaseManager.swift */; };
 		54B53BD4039BC55F7E51DBA1 /* TranscriptCleaningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6956BBB8490CAB38B366AD /* TranscriptCleaningTests.swift */; };
 		54DE9756058C374A2F1EDD77 /* LiveInsightsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359FE3F6BDC86C71BF4615F4 /* LiveInsightsPanel.swift */; };
@@ -58,8 +61,10 @@
 		60E297000C23408596B8EDEF /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B57F55C34BF1A36CFB65CD2E /* Sparkle */; };
 		61F208CD766E0B086BDA1C79 /* SpaceGrotesk-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 047FC15290BBBA57AB0A6F13 /* SpaceGrotesk-SemiBold.ttf */; };
 		6469FB9876695FB797D091AF /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B974775B58F5B52261CB8F0E /* AppDelegate.swift */; };
+		64CC516B92A56E686F32282C /* AWSBedrock in Frameworks */ = {isa = PBXBuildFile; productRef = E16DD6F4B2645F0FFB2C06EB /* AWSBedrock */; };
 		6506E56FB9DCB7CC76BAD493 /* IntelFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DA255E9F8D5FCF488C78C46 /* IntelFallback.swift */; };
 		653D38B5CBD943B093ED4985 /* AudioFileLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857C859FC536E766B3B4985B /* AudioFileLoaderTests.swift */; };
+		66EA403D8BB30F3523F1368E /* ClaudeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6361DDE53013756FD314D644 /* ClaudeProvider.swift */; };
 		71E453A21CE79357E8802743 /* TranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A467B9750D50E3E16F12DB /* TranscriptionServiceTests.swift */; };
 		72E6985F70AAAF1E18BA1720 /* Inter-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = E866F53E1F8AA1A5D817AE2A /* Inter-OFL.txt */; };
 		75262DAFC2D2FD22D958648E /* ModelResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B5B833EE152500B10ED1D7 /* ModelResolver.swift */; };
@@ -73,6 +78,7 @@
 		879A7089E89871A3FB9C1C58 /* MicrophoneActivityMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C98C7199E2F9893A6DA489C /* MicrophoneActivityMonitorTests.swift */; };
 		87C0E80933EE8070FD370171 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0787D986242AA8EAE39CE31 /* GRDB */; };
 		88B43A05F7AD8787C59A06F2 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC165BBB9D44569D10655056 /* Components.swift */; };
+		8A6C71D45CCE29414735039D /* AWSSDKIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 0C6302D32375026887598C50 /* AWSSDKIdentity */; };
 		8C6E8D8A7A029CB54AD9DAE8 /* SummaryMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = B956D7A81C34FCB29CBD3F19 /* SummaryMarkdown.swift */; };
 		8E93EBE7675EA60F8918B1A4 /* AudioCaptureErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE8BCF2934E2187177E80B7 /* AudioCaptureErrorTests.swift */; };
 		904431E610014D212BE72BF6 /* MicrophoneCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABFAA681CD99873272F5C47B /* MicrophoneCaptureServiceTests.swift */; };
@@ -182,7 +188,9 @@
 		589E1F27F3510304B5BC259C /* TranscriptSegmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegmentTests.swift; sourceTree = "<group>"; };
 		59A467B9750D50E3E16F12DB /* TranscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceTests.swift; sourceTree = "<group>"; };
 		5DA255E9F8D5FCF488C78C46 /* IntelFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelFallback.swift; sourceTree = "<group>"; };
+		6023DCD64C903143CDB686A7 /* BedrockProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BedrockProviderTests.swift; sourceTree = "<group>"; };
 		60BEC91F1C61545CEEEC87E6 /* LiveTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptView.swift; sourceTree = "<group>"; };
+		6361DDE53013756FD314D644 /* ClaudeProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeProvider.swift; sourceTree = "<group>"; };
 		6668AA3D3917F67001AF0251 /* SpeakerNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerNaming.swift; sourceTree = "<group>"; };
 		68F23295F013B9414A358A6F /* Inter-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Regular.ttf"; sourceTree = "<group>"; };
 		69ECB8308AD4C4C2D4C99799 /* TranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionStore.swift; sourceTree = "<group>"; };
@@ -206,6 +214,7 @@
 		9C2ECBBFA9512948671DA0E4 /* ULID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ULID.swift; sourceTree = "<group>"; };
 		9C46AD228204F7BFD8C3D456 /* LocalSpeakerIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeakerIdentifier.swift; sourceTree = "<group>"; };
 		9CE0786A74E39AB51A9EE4B7 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		9FB2F761A9C665F588AD5FBE /* BedrockProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BedrockProvider.swift; sourceTree = "<group>"; };
 		A19649BB8630C94B05921DF7 /* SummaryMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryMarkdownTests.swift; sourceTree = "<group>"; };
 		A312ACF11CC7A0E082DA3B72 /* MicrophoneResamplerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneResamplerTests.swift; sourceTree = "<group>"; };
 		A43A4A00C89963F331179BB2 /* MicrophoneResampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneResampler.swift; sourceTree = "<group>"; };
@@ -268,6 +277,9 @@
 				60E297000C23408596B8EDEF /* Sparkle in Frameworks */,
 				DBF0B39DD7C5F8F8D1E7DDF2 /* WhisperKit in Frameworks */,
 				D086793FC7A3DCF3B0D34C4A /* SpeakerKit in Frameworks */,
+				294FAD2811918EC88906E057 /* AWSBedrockRuntime in Frameworks */,
+				64CC516B92A56E686F32282C /* AWSBedrock in Frameworks */,
+				8A6C71D45CCE29414735039D /* AWSSDKIdentity in Frameworks */,
 				916133DE7265D70116383D64 /* ScreenCaptureKit.framework in Frameworks */,
 				5FD0ED8B510D037C589E651D /* AVFoundation.framework in Frameworks */,
 				4560E1ADE4897EAA36BDCCD7 /* Security.framework in Frameworks */,
@@ -373,6 +385,7 @@
 				237078CD234A18F214A51D4F /* SummarizationService.swift */,
 				B956D7A81C34FCB29CBD3F19 /* SummaryMarkdown.swift */,
 				38BC7042C84DA75D63A80284 /* SummaryPromptTemplate.swift */,
+				CE0178317F426B7427B55C73 /* Providers */,
 			);
 			path = Summarization;
 			sourceTree = "<group>";
@@ -441,6 +454,7 @@
 		670ED5748015A2AA37D201BD /* SummarizationTests */ = {
 			isa = PBXGroup;
 			children = (
+				6023DCD64C903143CDB686A7 /* BedrockProviderTests.swift */,
 				AA7A9AE1A6C47139723EBDD3 /* LiveInsightPolicyTests.swift */,
 				F288B29F7DCF84EA89F4DF8E /* LiveInsightPromptTests.swift */,
 				29EA1E3F78C495E70767B17D /* LiveInsightsEngineTests.swift */,
@@ -568,6 +582,15 @@
 			path = Storage;
 			sourceTree = "<group>";
 		};
+		CE0178317F426B7427B55C73 /* Providers */ = {
+			isa = PBXGroup;
+			children = (
+				9FB2F761A9C665F588AD5FBE /* BedrockProvider.swift */,
+				6361DDE53013756FD314D644 /* ClaudeProvider.swift */,
+			);
+			path = Providers;
+			sourceTree = "<group>";
+		};
 		D189717B34DF0A4152D8D3C3 /* AudioTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -646,6 +669,9 @@
 				B57F55C34BF1A36CFB65CD2E /* Sparkle */,
 				1AF6EE5A7E42CDAEA2C4A4CE /* WhisperKit */,
 				3E87A703E3DA501152A731D5 /* SpeakerKit */,
+				AC7026109A03F86E10672163 /* AWSBedrockRuntime */,
+				E16DD6F4B2645F0FFB2C06EB /* AWSBedrock */,
+				0C6302D32375026887598C50 /* AWSSDKIdentity */,
 			);
 			productName = Echoic;
 			productReference = 167310FEDEEE59AC99CCAFFB /* Echoic.app */;
@@ -700,6 +726,7 @@
 			mainGroup = 3A32CADC2795877B146AB8D8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				2D2B72418536646063C96A64 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */,
 				D57AD8A18FF4A3E0518F11E5 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				5C7AA1238724547371A784BB /* XCRemoteSwiftPackageReference "Sparkle" */,
 				FE52A9E827A110399980DADF /* XCRemoteSwiftPackageReference "WhisperKit" */,
@@ -742,6 +769,7 @@
 			files = (
 				8E93EBE7675EA60F8918B1A4 /* AudioCaptureErrorTests.swift in Sources */,
 				653D38B5CBD943B093ED4985 /* AudioFileLoaderTests.swift in Sources */,
+				4BA1988F0A0F724C51C44EFE /* BedrockProviderTests.swift in Sources */,
 				3071D3EDE7FD170A81AA9177 /* CallPromptRouterTests.swift in Sources */,
 				B6818D1403A321E4A79800BF /* CrossTalkFilterTests.swift in Sources */,
 				E788B9D75E3085FF55A575B6 /* DatabaseManagerTests.swift in Sources */,
@@ -789,9 +817,11 @@
 				E34101631B3BF4814A6B70B2 /* AudioFileLoader.swift in Sources */,
 				ADDE5D03BA7919C3EC619D28 /* AudioFileManager.swift in Sources */,
 				420ACA5165FEA67E50B8F508 /* AudioPlaybackService.swift in Sources */,
+				50724425776D12512AE57E04 /* BedrockProvider.swift in Sources */,
 				12BA5D09AC2C399691729603 /* CallPromptPanel.swift in Sources */,
 				96B467CCC8B581E8ECA59879 /* CallPromptRouter.swift in Sources */,
 				A016C3C5A00837DDBA4E6A87 /* CallPromptView.swift in Sources */,
+				66EA403D8BB30F3523F1368E /* ClaudeProvider.swift in Sources */,
 				88B43A05F7AD8787C59A06F2 /* Components.swift in Sources */,
 				E6AEAB618303BBF4858C0488 /* ConsentReminderService.swift in Sources */,
 				591BF25DF6C1DCD358852416 /* CrossTalkFilter.swift in Sources */,
@@ -1088,6 +1118,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2D2B72418536646063C96A64 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/awslabs/aws-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.8.0;
+			};
+		};
 		5C7AA1238724547371A784BB /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1115,6 +1153,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		0C6302D32375026887598C50 /* AWSSDKIdentity */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D2B72418536646063C96A64 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */;
+			productName = AWSSDKIdentity;
+		};
 		175E6D5156E0E5623291D669 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D57AD8A18FF4A3E0518F11E5 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
@@ -1135,10 +1178,20 @@
 			package = D57AD8A18FF4A3E0518F11E5 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
+		AC7026109A03F86E10672163 /* AWSBedrockRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D2B72418536646063C96A64 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */;
+			productName = AWSBedrockRuntime;
+		};
 		B57F55C34BF1A36CFB65CD2E /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 5C7AA1238724547371A784BB /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		E16DD6F4B2645F0FFB2C06EB /* AWSBedrock */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D2B72418536646063C96A64 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */;
+			productName = AWSBedrock;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

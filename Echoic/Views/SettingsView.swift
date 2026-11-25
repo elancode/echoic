@@ -6,7 +6,7 @@ import SwiftUI
 struct SettingsView: View {
     enum Page: String, CaseIterable, Hashable {
         case general = "General"
-        case api = "API key"
+        case api = "Claude"
         case audio = "Audio"
         case models = "Models"
     }
@@ -43,7 +43,7 @@ struct SettingsView: View {
     private var pageContent: some View {
         switch page {
         case .general: GeneralSettingsTab()
-        case .api: APISettingsTab()
+        case .api: ClaudeProviderSettingsTab()
         case .audio: AudioSettingsTab()
         case .models: ModelSettingsTab()
         }
@@ -158,6 +158,166 @@ struct GeneralSettingsTab: View {
 
 // MARK: - API
 
+/// Settings > Claude: where summaries and live insights are sent.
+struct ClaudeProviderSettingsTab: View {
+    @AppStorage(ClaudeProviderSettings.kindKey) private var kind = ClaudeProviderKind.anthropic.rawValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsSection(title: "Provider") {
+                HStack(spacing: 4) {
+                    ForEach(ClaudeProviderKind.allCases, id: \.self) { option in
+                        FilterPill(title: option.displayName, isSelected: option.rawValue == kind) {
+                            kind = option.rawValue
+                        }
+                    }
+                }
+                Caption("Only transcript text is sent to Claude, for summaries and live insights. Audio never leaves this Mac.")
+            }
+            if kind == ClaudeProviderKind.bedrock.rawValue {
+                BedrockSettings()
+            } else {
+                APISettingsTab()
+            }
+        }
+    }
+}
+
+/// Amazon Bedrock: region and credentials, with a connection test.
+private struct BedrockSettings: View {
+    @AppStorage(ClaudeProviderSettings.bedrockRegionKey) private var region = ClaudeProviderSettings.defaultRegion
+    @AppStorage(ClaudeProviderSettings.bedrockAuthKey) private var auth = BedrockAuthMode.awsProfile.rawValue
+    @AppStorage(ClaudeProviderSettings.bedrockProfileKey) private var profile = ClaudeProviderSettings.defaultProfile
+    @State private var apiKeyDraft = ""
+    @State private var hasAPIKey = false
+    @State private var test: ConnectionTest = .idle
+
+    enum ConnectionTest: Equatable {
+        case idle, testing, success(String), failure(String)
+    }
+
+    var body: some View {
+        SettingsSection(title: "Amazon Bedrock") {
+            LabeledField(label: "Region") {
+                TextField("us-east-1", text: $region).textFieldStyle(.plain).font(.mono(12))
+            }
+            HStack(spacing: 4) {
+                ForEach(BedrockAuthMode.allCases, id: \.self) { mode in
+                    FilterPill(title: mode.displayName, isSelected: mode.rawValue == auth) { auth = mode.rawValue }
+                }
+            }
+            if auth == BedrockAuthMode.apiKey.rawValue {
+                apiKeyFields
+            } else {
+                LabeledField(label: "Profile") {
+                    TextField("default", text: $profile).textFieldStyle(.plain).font(.mono(12))
+                }
+                Caption("Uses this profile from ~/.aws/config, including SSO and credential_process helpers. "
+                        + "Echoic doesn't store AWS credentials.")
+            }
+            HStack(spacing: 8) {
+                Button(test == .testing ? "Testing…" : "Test connection", action: runTest)
+                    .buttonStyle(InkButtonStyle(kind: .secondary))
+                    .disabled(test == .testing)
+                testResult
+            }
+        }
+        .onAppear { hasAPIKey = (try? KeychainService.retrieveBedrockAPIKey()) != nil }
+        .onChange(of: region) { _ in test = .idle }
+        .onChange(of: auth) { _ in test = .idle }
+        .onChange(of: profile) { _ in test = .idle }
+    }
+
+    @ViewBuilder
+    private var apiKeyFields: some View {
+        if hasAPIKey {
+            HStack {
+                StatusText(text: "Bedrock API key saved in Keychain", isGood: true)
+                Spacer()
+                Button("Remove") {
+                    try? KeychainService.deleteBedrockAPIKey()
+                    hasAPIKey = false
+                }
+                .buttonStyle(InkButtonStyle(kind: .secondary))
+            }
+        } else {
+            HStack(spacing: 8) {
+                LabeledField(label: "API key") {
+                    SecureField("Bedrock API key", text: $apiKeyDraft).textFieldStyle(.plain).font(.mono(12))
+                }
+                Button("Save") {
+                    try? KeychainService.saveBedrockAPIKey(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines))
+                    apiKeyDraft = ""
+                    hasAPIKey = true
+                }
+                .buttonStyle(InkButtonStyle(kind: .primary))
+                .disabled(apiKeyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        Caption("Short-term keys last up to 12 hours and work only in the region they were created in.")
+    }
+
+    @ViewBuilder
+    private var testResult: some View {
+        switch test {
+        case .success(let model): StatusText(text: "Connected · \(model)", isGood: true)
+        case .failure(let message): StatusText(text: message, isGood: false)
+        case .idle, .testing: EmptyView()
+        }
+    }
+
+    /// Lists models with the current settings: proves credentials, region and access.
+    private func runTest() {
+        test = .testing
+        let provider = ClaudeProviders.current()
+        Task {
+            do {
+                var model = try await provider.newestModel(in: "opus")
+                if model == nil { model = try await provider.newestModel(in: "sonnet") }
+                if let model {
+                    test = .success(model)
+                } else {
+                    test = .failure("Connected, but no Claude models are enabled in \(region).")
+                }
+            } catch {
+                test = .failure(Self.describe(error))
+            }
+        }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        switch error {
+        case AnthropicError.httpError(let status, _) where status == 401 || status == 403:
+            return "Access denied. Check the credentials and that this account can use Bedrock here."
+        case AnthropicError.invalidURL:
+            return "That region doesn't look right."
+        case KeychainService.KeychainError.itemNotFound:
+            return "Save a Bedrock API key first."
+        default:
+            return error.localizedDescription
+        }
+    }
+}
+
+/// A label beside a bordered single-line field.
+private struct LabeledField<Field: View>: View {
+    let label: String
+    @ViewBuilder let field: Field
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label).frame(width: 64, alignment: .leading)
+            field
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .strokeBorder(Theme.border, lineWidth: 1)
+                )
+        }
+    }
+}
+
 struct APISettingsTab: View {
     @State private var apiKey = ""
     @State private var hasExistingKey = false
@@ -169,7 +329,7 @@ struct APISettingsTab: View {
     }
 
     var body: some View {
-        SettingsSection(title: "Anthropic") {
+        SettingsSection(title: "Anthropic API key") {
             if hasExistingKey {
                 HStack(spacing: 8) {
                     StatusText(text: "Saved in Keychain", isGood: true)

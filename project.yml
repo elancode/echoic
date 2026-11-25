@@ -21,6 +21,9 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     from: "0.9.0"
+  AWSSDK:
+    url: https://github.com/awslabs/aws-sdk-swift
+    from: "1.8.0"
 
 targets:
   Echoic:
@@ -47,6 +50,12 @@ targets:
         product: WhisperKit
       - package: WhisperKit
         product: SpeakerKit
+      - package: AWSSDK
+        product: AWSBedrockRuntime
+      - package: AWSSDK
+        product: AWSBedrock
+      - package: AWSSDK
+        product: AWSSDKIdentity
       - sdk: ScreenCaptureKit.framework
       - sdk: AVFoundation.framework
       - sdk: Security.framework

@@ -421,7 +421,7 @@ final class MeetingCoordinator: ObservableObject {
             liveInsightsStatus = .disabled
             return
         }
-        guard (try? KeychainService.retrieveAPIKey()) != nil else {
+        guard ClaudeProviders.isConfigured() else {
             liveInsightsStatus = .needsAPIKey
             return
         }
