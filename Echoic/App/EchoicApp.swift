@@ -11,6 +11,9 @@ struct EchoicApp: App {
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "onboardingComplete")
 
     init() {
+        // Bundled Inter, Space Grotesk and JetBrains Mono (falls back to system fonts)
+        FontRegistry.registerBundledFonts()
+
         // Initialize database on launch
         try? DatabaseManager.shared.setup()
 
