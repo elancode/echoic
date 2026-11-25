@@ -38,6 +38,10 @@ enum Theme {
     static let darkDivider = Color(hex: 0x2A2E33)
     static let darkTextMuted = Color(hex: 0xA9AEA8)
     static let darkText2 = Color(hex: 0xC8CCC6)
+    /// Titles on dark surfaces (call prompt).
+    static let darkText = Color(hex: 0xF4F5F2)
+    /// The dot on the call prompt's white Record button.
+    static let recordDot = Color(hex: 0xD9481F)
 
     // MARK: Speakers
 

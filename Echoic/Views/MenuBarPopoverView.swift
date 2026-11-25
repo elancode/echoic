@@ -25,6 +25,9 @@ struct MenuBarPopoverView: View {
             }
         }
         .frame(width: 340)
+        .background(WindowKeyObserver { isOpen in
+            if isOpen { meetingDetector.menuOpened() } else { meetingDetector.menuClosed() }
+        })
     }
 
     private func open(_ windowId: String) {
@@ -37,7 +40,7 @@ struct MenuBarPopoverView: View {
 // MARK: - Header
 
 private struct PopoverHeader: View {
-    let status: String
+    let status: String?
     var isLive = false
     var onDark = false
     let onSettings: () -> Void
@@ -50,9 +53,11 @@ private struct PopoverHeader: View {
                 AppMark(size: 18, color: onDark ? .white : Theme.ink)
                 Text("Echoic").font(.display(16)).foregroundColor(onDark ? .white : Theme.ink)
             }
-            Text(status)
-                .font(.inter(isLive ? 14 : 12, weight: isLive ? .semibold : .medium))
-                .foregroundColor(onDark ? .white : Theme.textMuted)
+            if let status {
+                Text(status)
+                    .font(.inter(isLive ? 14 : 12, weight: isLive ? .semibold : .medium))
+                    .foregroundColor(onDark ? .white : Theme.textMuted)
+            }
             Spacer()
             Button(action: onSettings) {
                 Image(systemName: "gearshape")
@@ -84,24 +89,24 @@ private struct ReadyPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PopoverHeader(status: statusText, onSettings: onSettings)
-            if let prompt = meetingDetector.prompt {
-                MeetingDetectedPrompt(
-                    prompt: prompt,
-                    onStart: { meetingDetector.acceptPrompt() },
-                    onDismiss: { meetingDetector.dismissPrompt() }
-                )
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-            }
+            PopoverHeader(status: isOnCall ? nil : statusText, onSettings: onSettings)
             if let error = coordinator.state.errorText {
                 ErrorNote(message: error).padding(.horizontal, 16).padding(.bottom, 12)
             }
+            if isOnCall {
+                OnCallStatus(text: CallPromptRouter.menuStatus(appName: meetingDetector.callAppName))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+            }
             SourcePicker(meetingAudio: $meetingAudio, microphone: $microphone)
                 .padding(.horizontal, 16)
-            StartButton(isEnabled: canStart, onStart: coordinator.toggleRecording)
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
+            StartButton(
+                title: isOnCall ? "Record this call" : "Start recording",
+                isEnabled: canStart,
+                onStart: isOnCall ? meetingDetector.acceptPrompt : coordinator.toggleRecording
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
             Text(startCaption)
                 .font(.inter(12))
                 .foregroundColor(Theme.textMuted)
@@ -115,6 +120,9 @@ private struct ReadyPopover: View {
         .background(Theme.surface)
         .environment(\.colorScheme, .light)
     }
+
+    /// A call is detected and unanswered: the menu is in its on-a-call state.
+    private var isOnCall: Bool { meetingDetector.isOnUnansweredCall && coordinator.state != .processing }
 
     private var canStart: Bool { (meetingAudio || microphone) && coordinator.state != .processing }
 
@@ -159,7 +167,23 @@ private struct SourceLabel: View {
     }
 }
 
+/// "You're on a Zoom call" with the accent dot, above "Listening to".
+private struct OnCallStatus: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(Theme.accentFill).frame(width: 8, height: 8).accessibilityHidden(true)
+            Text(text)
+                .font(.inter(15, weight: .semibold))
+                .foregroundColor(Theme.ink)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct StartButton: View {
+    let title: String
     let isEnabled: Bool
     let onStart: () -> Void
 
@@ -167,7 +191,7 @@ private struct StartButton: View {
         Button(action: onStart) {
             HStack(spacing: 10) {
                 LiveDot(size: 8)
-                Text("Start recording").font(.inter(14, weight: .semibold))
+                Text(title).font(.inter(14, weight: .semibold))
                 Spacer()
                 Text("⌘R").font(.mono(11)).foregroundColor(.white.opacity(0.7)).accessibilityHidden(true)
             }
@@ -346,52 +370,6 @@ private struct RecordingActions: View {
             .accessibilityLabel(bookmarkCount == 0 ? "Bookmark this moment" : "Bookmark this moment, \(bookmarkCount) so far")
             Button("Stop and summarize", action: onStop)
                 .buttonStyle(InkButtonStyle(kind: .primary, onDark: true, height: 44, radius: Theme.Radius.card, fullWidth: true))
-        }
-    }
-}
-
-// MARK: - Meeting detection prompt
-
-struct MeetingDetectedPrompt: View {
-    let prompt: MeetingPrompt
-    let onStart: () -> Void
-    let onDismiss: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                LiveDot(size: 7)
-                Text(title)
-                    .font(.inter(13, weight: .medium))
-                    .foregroundColor(Theme.ink)
-                    .lineLimit(1)
-            }
-            HStack(spacing: 8) {
-                Button(primaryLabel, action: onStart)
-                    .buttonStyle(InkButtonStyle(kind: .primary, height: 28))
-                    .keyboardShortcut(.defaultAction)
-                    .accessibilityLabel(isStart ? "Start recording this meeting" : "Stop recording this meeting")
-                Button(isStart ? "Not now" : "Keep recording", action: onDismiss)
-                    .buttonStyle(InkButtonStyle(kind: .secondary, height: 28))
-                    .accessibilityLabel("Dismiss prompt")
-            }
-        }
-        .inkCard(padding: 12)
-    }
-
-    private var isStart: Bool {
-        if case .start = prompt { return true }
-        return false
-    }
-
-    private var primaryLabel: String { isStart ? "Start recording" : "Stop recording" }
-
-    private var title: String {
-        switch prompt {
-        case .start(let usage):
-            return usage.appName.map { "\($0) is using your mic" } ?? "Meeting detected"
-        case .stop(let appName):
-            return appName.map { "\($0) released your mic" } ?? "Meeting ended?"
         }
     }
 }

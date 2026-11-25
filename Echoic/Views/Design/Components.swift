@@ -242,13 +242,15 @@ struct InkCheckboxStyle: ToggleStyle {
 struct AppMark: View {
     var size: CGFloat = 20
     var color: Color = Theme.ink
+    /// Dot colour; defaults to the stroke colour.
+    var dotColor: Color?
 
     var body: some View {
         Canvas { context, canvasSize in
             let unit = canvasSize.width / 20
             let center = CGPoint(x: 5 * unit, y: canvasSize.height / 2)
             let dot = CGRect(x: center.x - 2.5 * unit, y: center.y - 2.5 * unit, width: 5 * unit, height: 5 * unit)
-            context.fill(Path(ellipseIn: dot), with: .color(color))
+            context.fill(Path(ellipseIn: dot), with: .color(dotColor ?? color))
             for (index, radius) in [7.0, 11.0, 15.0].enumerated() {
                 var arc = Path()
                 arc.addArc(
