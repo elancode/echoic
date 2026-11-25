@@ -14,6 +14,11 @@ struct EchoicApp: App {
         // Bundled Inter, Space Grotesk and JetBrains Mono (falls back to system fonts)
         FontRegistry.registerBundledFonts()
 
+        // Unit tests run inside this app. Never open the user's real database or
+        // "recover" their meetings from a test host: a test run during a live
+        // recording would mark it as crashed and try to post-process it.
+        guard !AppEnvironment.isHostingTests else { return }
+
         // Initialize database on launch
         try? DatabaseManager.shared.setup()
 
