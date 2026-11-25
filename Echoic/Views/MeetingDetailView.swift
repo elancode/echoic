@@ -1,406 +1,227 @@
 import AppKit
-import SwiftUI
 import GRDB
+import os.log
+import SwiftUI
+import UniformTypeIdentifiers
 
+private let detailLogger = Logger(subsystem: "com.echoic.app", category: "MeetingDetail")
+
+/// Library content pane: toolbar (Summary / Transcript, Copy, Export) over the
+/// summary document or the transcript.
 struct MeetingDetailView: View {
     let meeting: Meeting
 
-    private enum Tab {
-        case transcript, summary
-    }
+    enum Tab: Hashable { case summary, transcript }
 
     @State private var selectedTab: Tab = .summary
     @State private var segments: [TranscriptSegment] = []
-    @State private var summary: Summary?
-    @State private var summaryResponse: SummaryResponse?
-    /// Speaker display labels keyed by speaker ID (names inferred by summarization).
+    @State private var response: SummaryResponse?
     @State private var speakerLabels: [String: String] = [:]
-    @State private var copiedTranscript = false
-    @State private var copiedSummary = false
+    @State private var completedActionItems: Set<String> = []
+    @State private var transcriptTarget: Int64?
+    @State private var copied = false
+    @State private var namingSpeakerId: String?
+    @State private var speakerNameDraft = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 4) {
-                Text(meeting.title)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                HStack {
-                    Label(
-                        Date(timeIntervalSince1970: Double(meeting.startedAt) / 1000).meetingDisplayString,
-                        systemImage: "calendar"
-                    )
-
-                    if let duration = meeting.durationMs {
-                        Label(Date.formatDuration(ms: duration), systemImage: "clock")
-                    }
-                }
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-
-            // Tab picker
-            Picker("", selection: $selectedTab) {
-                Text("Summary").tag(Tab.summary)
-                Text("Transcript").tag(Tab.transcript)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-
-            Divider()
-
-            // Tab content
+            DetailToolbar(
+                selectedTab: $selectedTab,
+                copyTitle: copied ? "Copied" : (selectedTab == .summary ? "Copy summary" : "Copy transcript"),
+                canCopy: selectedTab == .summary ? response != nil : !segments.isEmpty,
+                onCopy: copy,
+                onExport: export
+            )
+            Rectangle().fill(Theme.hairline).frame(height: 1)
             switch selectedTab {
-            case .transcript:
-                transcriptTab
             case .summary:
-                summaryTab
+                ScrollView {
+                    SummaryDocumentView(
+                        document: document,
+                        onTimestamp: jumpToTranscript,
+                        onToggleActionItem: setActionItem,
+                        onNameSpeaker: beginNaming
+                    )
+                }
+            case .transcript:
+                TranscriptPane(blocks: TranscriptBlocks.make(from: segments, labels: speakerLabels),
+                               scrollTarget: $transcriptTarget)
             }
         }
         .onAppear(perform: loadData)
         .onChange(of: meeting) { _ in loadData() }
-    }
-
-    // MARK: - Transcript Tab
-
-    @ViewBuilder
-    private var transcriptTab: some View {
-        if segments.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "text.alignleft")
-                    .font(.title)
-                    .foregroundColor(.secondary)
-                Text("No Transcript")
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button(action: copyTranscript) {
-                        Label(copiedTranscript ? "Copied" : "Copy Transcript", systemImage: copiedTranscript ? "checkmark" : "doc.on.doc")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(.trailing)
-                    .padding(.vertical, 4)
-                }
-
-                ScrollView {
-                    Text(Self.buildTranscriptText(from: segments, labels: speakerLabels))
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-            }
+        .alert("Name this speaker", isPresented: isNamingSpeaker) {
+            TextField("Name", text: $speakerNameDraft)
+            Button("Save", action: saveSpeakerName)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Used for this meeting's transcript and summary.")
         }
     }
 
-    // MARK: - Summary Tab
+    // MARK: - Derived state
 
-    @ViewBuilder
-    private var summaryTab: some View {
-        if let response = summaryResponse {
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button(action: copySummary) {
-                        Label(copiedSummary ? "Copied" : "Copy Summary", systemImage: copiedSummary ? "checkmark" : "doc.on.doc")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(.trailing)
-                    .padding(.vertical, 4)
-                }
+    private var document: MeetingDocument {
+        MeetingDocument(
+            meeting: meeting, response: response, labels: speakerLabels,
+            speakers: orderedSpeakers, completedActionItems: completedActionItems
+        )
+    }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Meeting overview
-                    if response.meetingType != nil || response.participants != nil || response.durationTone != nil {
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let type = response.meetingType {
-                                HStack(alignment: .top, spacing: 4) {
-                                    Text("Type:").fontWeight(.medium)
-                                    Text(type)
-                                }
-                                .font(.subheadline)
-                            }
-                            if let participants = response.participants {
-                                HStack(alignment: .top, spacing: 4) {
-                                    Text("Participants:").fontWeight(.medium)
-                                    Text(participants)
-                                }
-                                .font(.subheadline)
-                            }
-                            if let tone = response.durationTone {
-                                Text(tone)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .textSelection(.enabled)
-                        Divider()
-                    }
-
-                    // Executive summary
-                    Text(response.executiveSummary)
-                        .textSelection(.enabled)
-                        .fontWeight(.medium)
-
-                    // Detailed summary
-                    if let detailed = response.detailedSummary, !detailed.isEmpty {
-                        Divider()
-                        Text(detailed)
-                            .textSelection(.enabled)
-                    }
-
-                    // Decisions
-                    if !response.decisions.isEmpty {
-                        SectionHeader(title: "Decisions", icon: "checkmark.seal")
-                        ForEach(response.decisions, id: \.decision) { decision in
-                            HStack(alignment: .top) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                VStack(alignment: .leading) {
-                                    Text(decision.decision)
-                                        .textSelection(.enabled)
-                                    if let speaker = SpeakerNaming.resolve(decision.speaker, labels: speakerLabels) {
-                                        Text(speaker)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Action items
-                    if !response.actionItems.isEmpty {
-                        SectionHeader(title: "Action Items", icon: "checklist")
-                        ForEach(response.actionItems, id: \.task) { item in
-                            HStack(alignment: .top) {
-                                Image(systemName: "square")
-                                    .foregroundColor(.blue)
-                                VStack(alignment: .leading) {
-                                    Text(item.task)
-                                        .textSelection(.enabled)
-                                    HStack {
-                                        if let owner = SpeakerNaming.resolve(item.owner, labels: speakerLabels) {
-                                            Text(owner)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        if let due = item.due {
-                                            Text("Due: \(due)")
-                                                .font(.caption)
-                                                .foregroundColor(.orange)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Notable quotes
-                    if let quotes = response.notableQuotes, !quotes.isEmpty {
-                        SectionHeader(title: "Notable Quotes", icon: "quote.bubble")
-                        ForEach(Array(quotes.enumerated()), id: \.offset) { _, quote in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\"\(quote.quote)\"")
-                                    .italic()
-                                    .textSelection(.enabled)
-                                HStack {
-                                    if let speaker = SpeakerNaming.resolve(quote.speaker, labels: speakerLabels) {
-                                        Text("— \(speaker)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    if let context = quote.context {
-                                        Text(context)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding()
+    /// "You" first, then other speakers in ID order. Falls back to the speaker IDs
+    /// in the transcript for meetings without speaker rows.
+    private var orderedSpeakers: [(id: String, label: String)] {
+        var ids = Set(speakerLabels.keys)
+        if ids.isEmpty { ids = Set(segments.compactMap(\.speakerId)) }
+        return ids
+            .sorted { lhs, rhs in
+                if lhs == TranscriptSegment.localSpeakerId { return true }
+                if rhs == TranscriptSegment.localSpeakerId { return false }
+                return lhs.localizedStandardCompare(rhs) == .orderedAscending
             }
-            }
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "doc.text")
-                    .font(.title)
-                    .foregroundColor(.secondary)
-                Text("No Summary")
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+            .map { ($0, speakerLabels[$0] ?? SpeakerMerge.defaultLabel(for: $0)) }
+    }
+
+    private var isNamingSpeaker: Binding<Bool> {
+        Binding(get: { namingSpeakerId != nil }, set: { if !$0 { namingSpeakerId = nil } })
     }
 
     // MARK: - Actions
 
-    /// Builds transcript text, grouping consecutive segments by speaker.
-    /// When speakers differ, inserts a blank line and a speaker label.
-    /// When no speaker IDs exist, just joins all text with spaces.
-    static func buildTranscriptText(
-        from segments: [TranscriptSegment],
-        labels: [Swift.String: Swift.String] = [:]
-    ) -> Swift.String {
-        let hasSpeakers = segments.contains { $0.speakerId != nil }
-        guard hasSpeakers else {
-            return segments.map(\.text).joined(separator: " ")
-        }
-
-        var parts: [Swift.String] = []
-        var currentSpeaker: Swift.String?
-        var currentTexts: [Swift.String] = []
-
-        for segment in segments {
-            let speaker = segment.speakerId.flatMap { labels[$0] } ?? segment.speakerDisplayName
-            if speaker != currentSpeaker {
-                // Flush previous speaker's text
-                if !currentTexts.isEmpty {
-                    let label = currentSpeaker ?? "Unknown"
-                    parts.append("\(label):\n\(currentTexts.joined(separator: " "))")
-                }
-                currentSpeaker = speaker
-                currentTexts = [segment.text]
-            } else {
-                currentTexts.append(segment.text)
-            }
-        }
-        // Flush last speaker
-        if !currentTexts.isEmpty {
-            let label = currentSpeaker ?? "Unknown"
-            parts.append("\(label):\n\(currentTexts.joined(separator: " "))")
-        }
-
-        return parts.joined(separator: "\n\n")
+    private func jumpToTranscript(_ ms: Int64) {
+        transcriptTarget = ms
+        selectedTab = .transcript
     }
 
-    private func copyTranscript() {
-        let transcriptText: Swift.String = Self.buildTranscriptText(from: segments, labels: speakerLabels)
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(transcriptText, forType: .string)
-        copiedTranscript = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copiedTranscript = false
+    private func copy() {
+        let text = selectedTab == .summary
+            ? response.map { SummaryMarkdown.render($0, title: meeting.title, labels: speakerLabels) }
+            : Self.buildTranscriptText(from: segments, labels: speakerLabels)
+        guard let text else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            copied = false
         }
     }
 
-    private func copySummary() {
-        guard let response = summaryResponse else { return }
-        let text = Self.buildSummaryText(from: response, labels: speakerLabels)
+    /// Saves the summary (if any) and the transcript as one Markdown file.
+    private func export() {
+        var markdown = response.map { SummaryMarkdown.render($0, title: meeting.title, labels: speakerLabels) }
+            ?? "# \(meeting.title)\n"
+        if !segments.isEmpty {
+            markdown += "\n## Transcript\n\n" + Self.buildTranscriptText(from: segments, labels: speakerLabels) + "\n"
+        }
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        copiedSummary = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copiedSummary = false
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = Self.exportFileName(for: meeting.title)
+        panel.begin { result in
+            guard result == .OK, let url = panel.url else { return }
+            do {
+                try markdown.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                detailLogger.error("Export failed: \(error.localizedDescription)")
+            }
         }
     }
 
-    static func buildSummaryText(
-        from response: SummaryResponse,
-        labels: [Swift.String: Swift.String] = [:]
-    ) -> Swift.String {
-        var parts: [Swift.String] = []
-
-        if let type = response.meetingType {
-            parts.append("Type: \(type)")
-        }
-        if let participants = response.participants {
-            parts.append("Participants: \(participants)")
-        }
-
-        parts.append("")
-        parts.append(response.executiveSummary)
-
-        if let detailed = response.detailedSummary, !detailed.isEmpty {
-            parts.append("")
-            parts.append(detailed)
-        }
-
-        if !response.decisions.isEmpty {
-            parts.append("")
-            parts.append("Decisions:")
-            for d in response.decisions {
-                let speaker = SpeakerNaming.resolve(d.speaker, labels: labels).map { " (\($0))" } ?? ""
-                parts.append("- \(d.decision)\(speaker)")
-            }
-        }
-
-        if !response.actionItems.isEmpty {
-            parts.append("")
-            parts.append("Action Items:")
-            for item in response.actionItems {
-                var line = "- \(item.task)"
-                if let owner = SpeakerNaming.resolve(item.owner, labels: labels) { line += " [\(owner)]" }
-                if let due = item.due { line += " (Due: \(due))" }
-                parts.append(line)
-            }
-        }
-
-        if let quotes = response.notableQuotes, !quotes.isEmpty {
-            parts.append("")
-            parts.append("Notable Quotes:")
-            for q in quotes {
-                var line = "- \"\(q.quote)\""
-                if let speaker = SpeakerNaming.resolve(q.speaker, labels: labels) { line += " — \(speaker)" }
-                parts.append(line)
-            }
-        }
-
-        return parts.joined(separator: "\n")
+    static func exportFileName(for title: String) -> String {
+        let cleaned = title.components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>")).joined(separator: "-")
+        return (cleaned.trimmingCharacters(in: .whitespaces).isEmpty ? "Meeting" : cleaned) + ".md"
     }
+
+    private func setActionItem(_ task: String, done: Bool) {
+        guard let db = DatabaseManager.shared.databaseWriter else { return }
+        do {
+            try db.write { try MeetingAnnotations.setActionItem(task, done: done, meetingId: meeting.id, db: $0) }
+            if done { completedActionItems.insert(task) } else { completedActionItems.remove(task) }
+        } catch {
+            detailLogger.error("Failed to update action item: \(error.localizedDescription)")
+        }
+    }
+
+    private func beginNaming(_ speakerId: String) {
+        speakerNameDraft = ""
+        namingSpeakerId = speakerId
+    }
+
+    private func saveSpeakerName() {
+        guard let speakerId = namingSpeakerId, let db = DatabaseManager.shared.databaseWriter else { return }
+        do {
+            try db.write { conn in
+                // Older meetings may have no speaker row yet.
+                let label = SpeakerMerge.defaultLabel(for: speakerId)
+                try conn.execute(
+                    sql: "INSERT OR IGNORE INTO meetingSpeaker (meetingId, speakerId, label) VALUES (?, ?, ?)",
+                    arguments: [meeting.id, speakerId, label]
+                )
+                try SpeakerNaming.rename(speakerId: speakerId, to: speakerNameDraft, meetingId: meeting.id, db: conn)
+            }
+            loadData()
+        } catch {
+            detailLogger.error("Failed to rename speaker: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Data
 
     private func loadData() {
         guard let db = DatabaseManager.shared.databaseWriter else { return }
-
-        segments = (try? db.read { dbConn in
-            try TranscriptSegment
-                .filter(TranscriptSegment.Columns.meetingId == meeting.id)
-                .order(TranscriptSegment.Columns.startMs)
-                .fetchAll(dbConn)
-        }) ?? []
-
-        speakerLabels = (try? db.read { dbConn in
-            try SpeakerNaming.labels(meetingId: meeting.id, db: dbConn)
-        }) ?? [:]
-
-        summary = try? db.read { dbConn in
-            try Summary.fetchOne(dbConn, key: meeting.id)
+        do {
+            try db.read { conn in
+                segments = try TranscriptSegment
+                    .filter(TranscriptSegment.Columns.meetingId == meeting.id)
+                    .order(TranscriptSegment.Columns.startMs)
+                    .fetchAll(conn)
+                speakerLabels = try SpeakerNaming.labels(meetingId: meeting.id, db: conn)
+                completedActionItems = try MeetingAnnotations.completedActionItems(meetingId: meeting.id, db: conn)
+                let summary = try Summary.fetchOne(conn, key: meeting.id)
+                response = summary.flatMap { try? JSONDecoder().decode(SummaryResponse.self, from: Data($0.rawJson.utf8)) }
+            }
+        } catch {
+            detailLogger.error("Failed to load meeting: \(error.localizedDescription)")
         }
+    }
 
-        if let rawJson = summary?.rawJson, let data = rawJson.data(using: .utf8) {
-            summaryResponse = try? JSONDecoder().decode(SummaryResponse.self, from: data)
+    /// Builds transcript text, grouping consecutive segments by speaker.
+    /// When no speaker IDs exist, just joins all text with spaces.
+    static func buildTranscriptText(from segments: [TranscriptSegment], labels: [String: String] = [:]) -> String {
+        guard segments.contains(where: { $0.speakerId != nil }) else {
+            return segments.map(\.text).joined(separator: " ")
         }
+        return TranscriptBlocks.make(from: segments, labels: labels)
+            .map { "\($0.label):\n\($0.text)" }
+            .joined(separator: "\n\n")
     }
 }
 
-// MARK: - Section Header
+// MARK: - Toolbar
 
-struct SectionHeader: View {
-    let title: String
-    let icon: String
+private struct DetailToolbar: View {
+    @Binding var selectedTab: MeetingDetailView.Tab
+    let copyTitle: String
+    let canCopy: Bool
+    let onCopy: () -> Void
+    let onExport: () -> Void
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .font(.headline)
-            .padding(.top, 4)
+        HStack(spacing: 8) {
+            SegmentedTabs(
+                tabs: [(MeetingDetailView.Tab.summary, "Summary"), (.transcript, "Transcript")],
+                selection: $selectedTab
+            )
+            Spacer()
+            Button(copyTitle, action: onCopy)
+                .buttonStyle(InkButtonStyle(kind: .secondary))
+                .disabled(!canCopy)
+            Button("Export", action: onExport)
+                .buttonStyle(InkButtonStyle(kind: .primary))
+                .accessibilityLabel("Export as Markdown")
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 52)
     }
 }

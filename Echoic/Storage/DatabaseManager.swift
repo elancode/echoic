@@ -166,6 +166,29 @@ final class DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v4_redesign") { db in
+            // Moments marked during recording ("Bookmark" in the recording popover)
+            try db.create(table: "bookmark") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("meetingId", .text)
+                    .notNull()
+                    .indexed()
+                    .references("meeting", onDelete: .cascade)
+                t.column("offsetMs", .integer).notNull()
+                t.column("createdAt", .integer).notNull()
+            }
+
+            // Action items ticked off in the summary, keyed by task text
+            try db.create(table: "actionItemStatus") { t in
+                t.column("meetingId", .text)
+                    .notNull()
+                    .references("meeting", onDelete: .cascade)
+                t.column("task", .text).notNull()
+                t.column("completedAt", .integer).notNull()
+                t.primaryKey(["meetingId", "task"])
+            }
+        }
+
         try migrator.migrate(writer)
     }
 

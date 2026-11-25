@@ -104,6 +104,7 @@ struct EchoicApp: App {
                     OnboardingView()
                 }
         }
+        .windowStyle(.hiddenTitleBar)
 
         Window("Live Transcript", id: "live-transcript") {
             LiveTranscriptView()

@@ -99,4 +99,24 @@ final class SpeakerNamingTests: XCTestCase {
     func test_systemPrompt_schema_requestsSpeakerNames() {
         XCTAssertTrue(SummaryPromptTemplate.systemPrompt.contains("\"speaker_names\""))
     }
+
+    // MARK: - Renaming
+
+    func test_rename_trimmedName_updatesLabel() throws {
+        try dbQueue.write { try SpeakerNaming.rename(speakerId: "speaker_2", to: "  Priya ", meetingId: meetingId, db: $0) }
+
+        XCTAssertEqual(try labels()["speaker_2"], "Priya")
+    }
+
+    func test_rename_blankName_keepsExistingLabel() throws {
+        try dbQueue.write { try SpeakerNaming.rename(speakerId: "speaker_2", to: "   ", meetingId: meetingId, db: $0) }
+
+        XCTAssertEqual(try labels()["speaker_2"], "Speaker 2")
+    }
+
+    func test_isUnnamed_defaultLabel_isTrue_namedOrYou_isFalse() {
+        XCTAssertTrue(SpeakerNaming.isUnnamed(speakerId: "speaker_3", label: "Speaker 3"))
+        XCTAssertFalse(SpeakerNaming.isUnnamed(speakerId: "speaker_3", label: "Priya"))
+        XCTAssertFalse(SpeakerNaming.isUnnamed(speakerId: "you", label: "You"))
+    }
 }

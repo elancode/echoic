@@ -234,6 +234,10 @@ struct SummaryResponse: Codable {
     let decisions: [Decision]
     let actionItems: [ActionItem]
     let notableQuotes: [NotableQuote]?
+    /// Questions raised but not resolved. Absent in summaries made before this field existed.
+    let openQuestions: [String]?
+    /// Topics in the order discussed, each with where it starts.
+    let topics: [Topic]?
     /// Names inferred for diarized speakers, keyed by speaker label (e.g. "speaker_1").
     let speakerNames: [String: String]?
 
@@ -247,6 +251,8 @@ struct SummaryResponse: Codable {
         case decisions
         case actionItems = "action_items"
         case notableQuotes = "notable_quotes"
+        case openQuestions = "open_questions"
+        case topics
         case speakerNames = "speaker_names"
     }
 
@@ -265,6 +271,16 @@ struct SummaryResponse: Codable {
         let task: String
         let owner: String?
         let due: String?
+    }
+
+    struct Topic: Codable {
+        let topic: String
+        let timestampMs: Int64?
+
+        enum CodingKeys: String, CodingKey {
+            case topic
+            case timestampMs = "timestamp_ms"
+        }
     }
 
     struct NotableQuote: Codable {

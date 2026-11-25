@@ -26,6 +26,10 @@ enum SummaryPromptTemplate {
           ],
           "notable_quotes": [
             {"quote": "Paraphrased memorable moment", "speaker": "Speaker label", "context": "Why this matters"}
+          ],
+          "open_questions": ["Question raised but not resolved in the meeting"],
+          "topics": [
+            {"topic": "Short topic name", "timestamp_ms": 0}
           ]
         }
 
@@ -37,7 +41,8 @@ enum SummaryPromptTemplate {
         - Be opinionated about importance: not every topic deserves equal weight. Lead with what matters most.
         - Keep it focused: target ~500-800 words for the detailed_summary. Shorter meetings get shorter summaries.
         - Pull 2-3 notable quotes — sharp or memorable moments that reveal strategy, philosophy, or hard-won lessons.
-        - If no decisions/action items/quotes exist, use empty arrays.
+        - If no decisions/action items/quotes/open questions exist, use empty arrays.
+        - topics: 3-8 main topics in the order discussed; timestamp_ms is where each topic starts.
         - Use speaker labels exactly as they appear in the transcript (in decisions, action_items, notable_quotes).
         - speaker_names maps transcript speaker labels to people's names. Include a label only when the \
         transcript makes the name clear (introductions, being addressed by name, self-reference). \
