@@ -82,6 +82,10 @@
 - [ ] **T60** · Cap post-processing retries — meetings whose summary keeps failing are retried on every launch · **S**
 - [ ] **T63** · Fix remaining strict-concurrency warnings (`SWIFT_STRICT_CONCURRENCY=complete`): capture services sent across actors, `ModelDownloadManager` @Published mutated off-main, `DatabaseManager.shared` · **M**
 - [ ] **T64** · `chunkingStrategy: .none` in live transcription resolves to `Optional.none` (nil), not `ChunkingStrategy.none` — confirm intended · **S**
+- [ ] **T66** · Redesign follow-ups (handover §6): design sign-off on vermilion vs blue; Transcript tab; empty/error/first-run states; where bookmarks show in the Library; Export destinations beyond Markdown; dark mode for Library/Settings · **M** · blocked-by: design
+- [ ] **T67** · Live level meters in the popover and Settings > Audio (deferred: needs the mic/ScreenCaptureKit open while idle) · **S**
+- [ ] **T68** · Restyle Live Transcript window, Live Insights panel and Onboarding with the new tokens (not in the handover) · **S**
+- [ ] **T69** · Library: stack the sidebar above content below ~860pt (currently a min window width) · **S**
 
 ---
 
@@ -136,3 +140,4 @@
 - [x] **T54** · Auto-stop recording when call ends · completed 2026-11-16
 - [x] **T61** · Fix crash on Start Recording: mic tap installed with stale format after headset rate change raised an uncatchable ObjC exception; fresh AVAudioEngine per session + format validation · completed 2026-11-24
 - [x] **T62** · Make TranscriptionService thread-safe (lock-protected state, per-run loop IDs, no unload mid-inference) · completed 2026-11-24
+- [x] **T65** · "Ink and signal" redesign: design system, Library, popover, Settings > Audio (per echoic-design-handover.md) · completed 2026-11-25
