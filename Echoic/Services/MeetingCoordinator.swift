@@ -18,8 +18,16 @@ final class MeetingCoordinator: ObservableObject {
     @Published var liveSegments: [TranscriptSegment] = []
     @Published var errorMessage: String?
     @Published var recordingMode: RecordingMode = .systemAudio
-    /// Bookmarks added during the current recording.
-    @Published var bookmarkCount = 0
+    /// Bookmarks added during the current recording, as offsets (ms) from the start.
+    @Published var bookmarks: [Int64] = []
+    var bookmarkCount: Int { bookmarks.count }
+    /// What the current recording is listening to, e.g. "Meeting audio + My microphone".
+    var activeSourcesDescription: String {
+        switch recordingMode {
+        case .microphone: return "My microphone"
+        case .systemAudio: return micTranscribedSeparately ? "Meeting audio + My microphone" : "Meeting audio"
+        }
+    }
     /// Latest recap, open concerns, and questions from the live insights agent.
     @Published var liveInsight: LiveInsight?
     @Published var liveInsightsStatus: LiveInsightsStatus = .disabled
@@ -99,7 +107,7 @@ final class MeetingCoordinator: ObservableObject {
         let offsetMs = Int64(Date().timeIntervalSince1970 * 1000) - meeting.startedAt
         do {
             try db.write { try MeetingAnnotations.addBookmark(meetingId: meeting.id, offsetMs: offsetMs, db: $0) }
-            bookmarkCount += 1
+            bookmarks.append(offsetMs)
         } catch {
             logger.error("Failed to save bookmark: \(error.localizedDescription)")
         }
@@ -117,7 +125,7 @@ final class MeetingCoordinator: ObservableObject {
             return
         }
         recordingMode = mode
-        bookmarkCount = 0
+        bookmarks = []
 
         // Reset error state so we start clean
         if state.errorText != nil {

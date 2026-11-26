@@ -115,7 +115,7 @@ struct EchoicApp: App {
         Window("Live Transcript", id: "live-transcript") {
             LiveTranscriptView()
         }
-        .defaultSize(width: 760, height: 560)
+        .defaultSize(width: 1200, height: 780)
 
         MenuBarExtra {
             MenuBarPopoverView()

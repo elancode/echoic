@@ -43,8 +43,8 @@ final class MeetingDetector: ObservableObject {
     private var router = CallPromptRouter()
     private let panel: CallPromptPresenting
     private var endPolicy = MeetingEndDetectionPolicy(minimumInactiveDuration: 10)
-    /// Most recent app seen using the mic during the current recording.
-    private var recordingAppName: String?
+    /// Most recent app seen using the mic during the current recording ("Zoom").
+    @Published private(set) var recordingAppName: String?
     private var monitorTask: Task<Void, Never>?
     private static let pollInterval: UInt64 = 2_000_000_000 // 2s
 
