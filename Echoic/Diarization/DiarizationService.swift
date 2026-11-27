@@ -44,7 +44,7 @@ final class DiarizationService {
         // Load audio as 16kHz mono float array
         print("[DiarizationService] Loading audio from: \(audioURL.path)")
         print("[DiarizationService] File exists: \(FileManager.default.fileExists(atPath: audioURL.path))")
-        let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let samples = try AudioFileLoader.loadMono16k(from: audioURL)
         print("[DiarizationService] Loaded \(samples.count) samples")
 
         // Configure diarization options
@@ -92,7 +92,7 @@ final class DiarizationService {
             throw DiarizationError.notInitialized
         }
 
-        let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let samples = try AudioFileLoader.loadMono16k(from: audioURL)
 
         let options = PyannoteDiarizationOptions(
             numberOfSpeakers: numberOfSpeakers

@@ -22,7 +22,7 @@ final class LocalSpeakerIdentifier {
         let micEmbedding = extractEmbedding(from: micSamples)
 
         // Load meeting audio
-        let meetingAudio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let meetingAudio = try AudioFileLoader.loadMono16k(from: audioURL)
 
         // Extract embeddings for each speaker
         var bestMatch: String?

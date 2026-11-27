@@ -18,6 +18,13 @@ final class MeetingCoordinator: ObservableObject {
     @Published var liveSegments: [TranscriptSegment] = []
     @Published var errorMessage: String?
     @Published var recordingMode: RecordingMode = .systemAudio
+    /// Latest recap, open concerns, and questions from the live insights agent.
+    @Published var liveInsight: LiveInsight?
+    @Published var liveInsightsStatus: LiveInsightsStatus = .disabled
+    /// Optional note about the meeting's purpose that helps keep insights relevant.
+    @Published var meetingContextNote = "" {
+        didSet { liveInsightsEngine?.contextNote = meetingContextNote }
+    }
 
     private lazy var audioCaptureService = AudioCaptureService()
     private let micCaptureService = MicrophoneCaptureService()
@@ -25,6 +32,7 @@ final class MeetingCoordinator: ObservableObject {
     private let diarizationService = DiarizationService()
     private let localSpeakerIdentifier = LocalSpeakerIdentifier()
     private var transcriptionStore: TranscriptionStore?
+    private var liveInsightsEngine: LiveInsightsEngine?
     private var modelLoadTask: Task<Void, Error>?
     private var modelUnloadTask: Task<Void, Never>?
     /// Keep the model loaded this long after a recording (or a dismissed prompt)
@@ -42,6 +50,14 @@ final class MeetingCoordinator: ObservableObject {
     /// Whether to capture and transcribe the user's mic in System Audio mode (on by default).
     nonisolated static func transcribesMicrophone(defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: microphoneSettingKey) as? Bool ?? true
+    }
+
+    /// UserDefaults key for "Live insights during meetings" (Settings → Models).
+    nonisolated static let liveInsightsSettingKey = "liveInsightsEnabled"
+
+    /// Whether the live insights agent runs during recordings (on by default).
+    nonisolated static func liveInsightsEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: liveInsightsSettingKey) as? Bool ?? true
     }
 
     /// The database writer for all operations.
@@ -131,6 +147,7 @@ final class MeetingCoordinator: ObservableObject {
                         meetingId: meeting.id,
                         sources: transcriptionSources
                     )
+                    startLiveInsights(meetingId: meeting.id, databaseWriter: db)
                 } catch {
                     logger.error("Transcription init failed (non-fatal): \(error.localizedDescription)")
                     errorMessage = "Live transcription unavailable: \(error.localizedDescription)"
@@ -138,6 +155,7 @@ final class MeetingCoordinator: ObservableObject {
             }
         } catch {
             // Clean up any capture services that may have started before the error
+            stopLiveInsights()
             transcriptionService.stopTranscription()
             if micCaptureService.isCapturing {
                 micCaptureService.stopCaptureSync()
@@ -159,6 +177,9 @@ final class MeetingCoordinator: ObservableObject {
         guard state == .recording, let meeting = currentMeeting else { return }
 
         state = .processing
+
+        // No more live updates once the meeting ends; the final summary takes over.
+        stopLiveInsights()
 
         do {
             // Stop transcription
@@ -272,6 +293,7 @@ final class MeetingCoordinator: ObservableObject {
             state = .idle
             currentMeeting = nil
             liveSegments = []
+            resetLiveInsights()
             scheduleModelUnload()
 
         } catch {
@@ -294,6 +316,7 @@ final class MeetingCoordinator: ObservableObject {
 
             state = .error(error.localizedDescription)
             errorMessage = error.localizedDescription
+            resetLiveInsights()
             scheduleModelUnload()
         }
     }
@@ -335,15 +358,56 @@ final class MeetingCoordinator: ObservableObject {
         }
     }
 
+    // MARK: - Live Insights
+
+    /// Asks the live insights agent to update now (if anything new was said).
+    func refreshInsights() {
+        liveInsightsEngine?.refresh()
+    }
+
+    private func startLiveInsights(meetingId: String, databaseWriter db: any DatabaseWriter) {
+        stopLiveInsights()
+        guard Self.liveInsightsEnabled() else {
+            liveInsightsStatus = .disabled
+            return
+        }
+        guard (try? KeychainService.retrieveAPIKey()) != nil else {
+            liveInsightsStatus = .needsAPIKey
+            return
+        }
+
+        let engine = LiveInsightsEngine(meetingId: meetingId, generator: AnthropicClient(), databaseWriter: db)
+        engine.contextNote = meetingContextNote
+        engine.onUpdate = { [weak self] insight in self?.liveInsight = insight }
+        engine.onStatusChange = { [weak self] status in self?.liveInsightsStatus = status }
+        liveInsightsEngine = engine
+        liveInsightsStatus = engine.status
+        engine.start()
+    }
+
+    private func stopLiveInsights() {
+        liveInsightsEngine?.stop()
+        liveInsightsEngine = nil
+    }
+
+    private func resetLiveInsights() {
+        liveInsight = nil
+        liveInsightsStatus = .disabled
+        meetingContextNote = ""
+    }
+
     // MARK: - Segment Handling
 
     private func handleNewSegment(_ segment: TranscriptSegment) {
+        // A chunk can finish after its meeting ended; never mix it into another meeting.
+        guard segment.meetingId == currentMeeting?.id else { return }
         do {
             // Only surface segments that were actually stored (not deduplicated),
             // so the live transcript matches what's persisted.
             if let stored = try transcriptionStore?.insert(segment) {
                 // System and mic tracks arrive out of order; keep time order
                 liveSegments.insertByStartTime(stored)
+                liveInsightsEngine?.segmentsDidChange(liveSegments)
             }
         } catch {
             // Log but don't interrupt recording

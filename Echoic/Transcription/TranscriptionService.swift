@@ -7,30 +7,59 @@ private let logger = Logger(subsystem: "com.echoic.app", category: "Transcriptio
 /// Manages real-time transcription using WhisperKit.
 /// Processes 10-second chunks with 2-second overlap, deduplicates by timestamp.
 /// Critical Rule #2: Runs in-process, no sidecars.
-final class TranscriptionService {
-    private var isTranscribing = false
-    private var whisperKit: WhisperKit?
+final class TranscriptionService: @unchecked Sendable {
+    // Sendable safety: every mutable property lives in `state` and is only
+    // touched while holding `lock`. The service is driven from the main actor
+    // (start/stop) and from detached tasks (model load, transcription loop).
+    private struct State {
+        var isTranscribing = false
+        /// Incremented on every start; a loop exits once its run is no longer current.
+        var runID: UInt64 = 0
+        var meetingId: String?
+        var onSegment: ((TranscriptSegment) -> Void)?
+        var whisperKit: WhisperKit?
+        var loadedModelFolder: String?
+        var activeLoopCount = 0
+    }
+
+    private let lock = NSLock()
+    private var state = State()
+
     private let chunkDuration: TimeInterval = 10.0
     private let overlapDuration: TimeInterval = 2.0
     private let sampleRate: Double = 16000
 
-    /// Callback for new transcript segments.
-    var onSegment: ((TranscriptSegment) -> Void)?
+    private func withState<T>(_ body: (inout State) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&state)
+    }
+
+    /// Callback for new transcript segments. Captured when a run starts, so
+    /// changing it affects the next run, not one already in progress.
+    var onSegment: ((TranscriptSegment) -> Void)? {
+        get { withState { $0.onSegment } }
+        set { withState { $0.onSegment = newValue } }
+    }
 
     /// Current meeting ID being transcribed.
-    private(set) var meetingId: String?
+    var meetingId: String? { withState { $0.meetingId } }
 
     /// Folder of the currently loaded model (nil if none, or loaded by variant name).
-    private(set) var loadedModelFolder: String?
+    var loadedModelFolder: String? { withState { $0.loadedModelFolder } }
 
     /// Whether a WhisperKit model is loaded and ready.
-    var isModelLoaded: Bool { whisperKit != nil }
+    var isModelLoaded: Bool { withState { $0.whisperKit != nil } }
+
+    /// Number of transcription loops still running, including one finishing
+    /// its last chunk after a stop. Exposed for tests.
+    var activeLoopCount: Int { withState { $0.activeLoopCount } }
 
     /// Initializes WhisperKit with the given model variant.
     /// - Parameter model: Model name (e.g. "small.en", "large-v3"). If nil, uses default.
     /// No-op if a model is already loaded.
     func initialize(model: String? = nil) async throws {
-        guard whisperKit == nil else { return }
+        guard !isModelLoaded else { return }
 
         let manager = ModelDownloadManager()
         manager.cleanCache()
@@ -49,14 +78,19 @@ final class TranscriptionService {
             useBackgroundDownloadSession: false
         )
         config.verbose = false
-        whisperKit = try await WhisperKit(config)
+        let loaded = try await WhisperKit(config)
+        withState {
+            $0.whisperKit = loaded
+            $0.loadedModelFolder = nil
+        }
     }
 
     /// Initializes WhisperKit from a pre-downloaded model folder.
     /// No-op if that model is already loaded — loading a large model is a burst of
     /// heavy CPU/Neural Engine work, so it's done once and kept between recordings.
     func initialize(modelFolder: String) async throws {
-        if whisperKit != nil, loadedModelFolder == modelFolder { return }
+        let alreadyLoaded = withState { $0.whisperKit != nil && $0.loadedModelFolder == modelFolder }
+        if alreadyLoaded { return }
 
         let manager = ModelDownloadManager()
         manager.cleanCache()
@@ -77,18 +111,29 @@ final class TranscriptionService {
         )
         config.verbose = false
         let start = Date()
-        whisperKit = try await WhisperKit(config)
-        loadedModelFolder = modelFolder
+        let loaded = try await WhisperKit(config)
+        withState {
+            $0.whisperKit = loaded
+            $0.loadedModelFolder = modelFolder
+        }
         ModelDownloadManager.markPrewarmed(modelFolder: modelURL)
         logger.notice("Loaded model \(modelURL.lastPathComponent, privacy: .public) in \(Date().timeIntervalSince(start), format: .fixed(precision: 1))s")
     }
 
     /// Releases the model's memory and Neural Engine resources.
+    /// Skipped while any loop is still running — including one finishing its
+    /// last chunk after a stop — so a model is never unloaded mid-inference.
     func unloadModel() async {
-        guard !isTranscribing, let whisperKit else { return }
-        await whisperKit.unloadModels()
-        self.whisperKit = nil
-        loadedModelFolder = nil
+        let detached: WhisperKit? = withState { state in
+            guard !state.isTranscribing, state.activeLoopCount == 0, let loaded = state.whisperKit else {
+                return nil
+            }
+            state.whisperKit = nil
+            state.loadedModelFolder = nil
+            return loaded
+        }
+        guard let detached else { return }
+        await detached.unloadModels()
         logger.notice("Unloaded transcription model")
     }
 
@@ -116,26 +161,42 @@ final class TranscriptionService {
     /// Starts real-time transcription of one or more audio sources. Sources share
     /// one WhisperKit instance and are transcribed in turn, in array order.
     func startTranscription(meetingId: String, sources: [AudioSource]) {
-        guard !isTranscribing, !sources.isEmpty else { return }
+        guard !sources.isEmpty else { return }
 
-        self.meetingId = meetingId
-        isTranscribing = true
+        let run: (id: UInt64, onSegment: ((TranscriptSegment) -> Void)?)? = withState { state in
+            guard !state.isTranscribing else { return nil }
+            state.isTranscribing = true
+            state.runID &+= 1
+            state.meetingId = meetingId
+            state.activeLoopCount += 1
+            return (state.runID, state.onSegment)
+        }
+        guard let run else { return }
 
         // Low priority so meeting apps (video, effects) win when competing for
         // CPU / Neural Engine time. Real-time is still met with headroom.
         Task.detached(priority: .utility) { [self] in
-            await transcriptionLoop(sources: sources)
+            await transcriptionLoop(
+                runID: run.id,
+                meetingId: meetingId,
+                onSegment: run.onSegment,
+                sources: sources
+            )
+            withState { $0.activeLoopCount -= 1 }
         }
     }
 
-    /// Stops transcription.
+    /// Stops transcription. A chunk already being transcribed finishes and is
+    /// still delivered (tagged with its own meeting ID); no new chunks start.
     func stopTranscription() {
-        isTranscribing = false
-        meetingId = nil
+        withState {
+            $0.isTranscribing = false
+            $0.meetingId = nil
+        }
     }
 
     /// Whether the service is currently transcribing.
-    var active: Bool { isTranscribing }
+    var active: Bool { withState { $0.isTranscribing } }
 
     /// Returns true if running on Apple Silicon (real-time capable).
     static var isAppleSilicon: Bool {
@@ -148,20 +209,30 @@ final class TranscriptionService {
 
     // MARK: - Transcription Loop
 
-    private func transcriptionLoop(sources: [AudioSource]) async {
+    /// Whether the given run is still the active one.
+    private func isCurrent(_ runID: UInt64) -> Bool {
+        withState { $0.isTranscribing && $0.runID == runID }
+    }
+
+    private func transcriptionLoop(
+        runID: UInt64,
+        meetingId: String,
+        onSegment: ((TranscriptSegment) -> Void)?,
+        sources: [AudioSource]
+    ) async {
         let chunkSamples = Int(chunkDuration * sampleRate)
         let advanceSamples = chunkSamples - Int(overlapDuration * sampleRate)
         var chunkStartMs = [Int64](repeating: 0, count: sources.count)
 
-        while isTranscribing {
+        while isCurrent(runID) {
             // Wait until at least one source has a full chunk
-            while isTranscribing && !sources.contains(where: { $0.ringBuffer.count >= chunkSamples }) {
+            while isCurrent(runID) && !sources.contains(where: { $0.ringBuffer.count >= chunkSamples }) {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             }
 
-            guard isTranscribing, let whisperKit else { break }
+            guard isCurrent(runID), let whisperKit = withState({ $0.whisperKit }) else { break }
 
-            for (index, source) in sources.enumerated() where isTranscribing {
+            for (index, source) in sources.enumerated() where isCurrent(runID) {
                 guard source.ringBuffer.count >= chunkSamples else { continue }
 
                 let samples = source.ringBuffer.read(count: advanceSamples)
@@ -176,12 +247,26 @@ final class TranscriptionService {
                     continue
                 }
 
-                await transcribeChunk(samples, startMs: startMs, speakerId: source.speakerId, whisperKit: whisperKit)
+                await transcribeChunk(
+                    samples,
+                    startMs: startMs,
+                    speakerId: source.speakerId,
+                    meetingId: meetingId,
+                    whisperKit: whisperKit,
+                    onSegment: onSegment
+                )
             }
         }
     }
 
-    private func transcribeChunk(_ samples: [Float], startMs chunkStartMs: Int64, speakerId: String?, whisperKit: WhisperKit) async {
+    private func transcribeChunk(
+        _ samples: [Float],
+        startMs chunkStartMs: Int64,
+        speakerId: String?,
+        meetingId: String,
+        whisperKit: WhisperKit,
+        onSegment: ((TranscriptSegment) -> Void)?
+    ) async {
         // Log audio level to diagnose silence/hallucination issues
         let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(samples.count))
         logger.notice("Chunk \(chunkStartMs)ms [\(speakerId ?? "system")]: \(samples.count) samples, RMS=\(rms)")
@@ -209,7 +294,7 @@ final class TranscriptionService {
                     guard !cleanedText.isEmpty else { continue }
 
                     let segment = TranscriptSegment(
-                        meetingId: meetingId ?? "",
+                        meetingId: meetingId,
                         startMs: startMs,
                         endMs: endMs,
                         speakerId: speakerId,
@@ -248,7 +333,7 @@ final class TranscriptionService {
     ///   - meetingId: Meeting ID for segment attribution.
     ///   - onSegment: Callback for each transcribed segment.
     func transcribeFile(audioPath: String, meetingId: String, onSegment: @escaping (TranscriptSegment) -> Void) async throws {
-        guard let whisperKit else {
+        guard let whisperKit = withState({ $0.whisperKit }) else {
             throw TranscriptionError.notInitialized
         }
 

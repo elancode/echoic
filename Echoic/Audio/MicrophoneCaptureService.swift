@@ -7,7 +7,10 @@ private let micLogger = Logger(subsystem: "com.echoic.app", category: "MicCaptur
 /// Captures microphone audio via AVAudioEngine on a separate channel.
 /// Used for local speaker identification ("You" label) and as primary input for in-person meetings.
 final class MicrophoneCaptureService {
-    private let engine = AVAudioEngine()
+    /// Recreated for every capture session. A long-lived engine caches the input
+    /// format from when it was first used, which goes stale when the device
+    /// changes rate (e.g. a Bluetooth headset switching to 24 kHz call mode).
+    private var engine = AVAudioEngine()
     private(set) var isCapturing = false
     private var ringBuffer: RingBuffer
 
@@ -69,6 +72,7 @@ final class MicrophoneCaptureService {
     func startCapture(deviceID: AudioDeviceID? = nil, meetingId: String? = nil) throws {
         guard !isCapturing else { return }
 
+        engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
         // Set device if specified
@@ -91,12 +95,20 @@ final class MicrophoneCaptureService {
             }
         }
 
-        let format = inputNode.outputFormat(forBus: 0)
-        let sampleRate = format.sampleRate
-
-        guard sampleRate > 0 && format.channelCount > 0 else {
+        // installTap raises an Objective-C exception (which Swift can't catch, and
+        // which corrupts the concurrency runtime as it unwinds) when the tap format
+        // doesn't match the hardware. Validate first and fail with a Swift error.
+        let hardwareFormat = inputNode.inputFormat(forBus: 0)
+        guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else {
             throw MicrophoneError.deviceNotAvailable
         }
+        guard let format = Self.tapFormat(hardware: hardwareFormat, output: inputNode.outputFormat(forBus: 0)) else {
+            micLogger.error(
+                "Mic format mismatch: hardware \(hardwareFormat.sampleRate) Hz / \(hardwareFormat.channelCount) ch, engine \(inputNode.outputFormat(forBus: 0).sampleRate) Hz"
+            )
+            throw MicrophoneError.formatMismatch
+        }
+        let sampleRate = format.sampleRate
 
         micLogger.notice("Mic format: \(sampleRate) Hz, \(format.channelCount) ch")
 
@@ -154,6 +166,18 @@ final class MicrophoneCaptureService {
             throw MicrophoneError.permissionDenied
         }
         isCapturing = true
+    }
+
+    /// The format to install the input tap with, or nil if the engine's output
+    /// format no longer matches the hardware (installing it would raise an
+    /// uncatchable Objective-C exception).
+    static func tapFormat(hardware: AVAudioFormat, output: AVAudioFormat) -> AVAudioFormat? {
+        guard hardware.sampleRate > 0, hardware.channelCount > 0,
+              output.sampleRate == hardware.sampleRate,
+              output.channelCount == hardware.channelCount else {
+            return nil
+        }
+        return output
     }
 
     /// Stops capturing microphone audio and finalizes any recording.
@@ -250,6 +274,7 @@ enum MicrophoneError: Error, LocalizedError {
     case permissionDenied
     case deviceNotAvailable
     case engineStartFailed
+    case formatMismatch
 
     var errorDescription: String? {
         switch self {
@@ -259,6 +284,8 @@ enum MicrophoneError: Error, LocalizedError {
             return "No microphone input device is available."
         case .engineStartFailed:
             return "Failed to start the audio engine for microphone capture."
+        case .formatMismatch:
+            return "The microphone changed format (for example, a headset switching to call mode). Try starting the recording again."
         }
     }
 }

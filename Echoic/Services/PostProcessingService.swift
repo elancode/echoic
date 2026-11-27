@@ -32,8 +32,13 @@ enum PostProcessingService {
     private static func ensureFinalAudio(meetingId: String) async -> Bool {
         do {
             let audioURL = try AudioFileManager.finalAudioURL(meetingId: meetingId)
-            if FileManager.default.fileExists(atPath: audioURL.path) {
+            if AudioFileManager.isReadableAudio(at: audioURL) {
                 return true
+            }
+            if FileManager.default.fileExists(atPath: audioURL.path) {
+                // Left half-written by an interrupted export; rebuild it from the segments.
+                logger.warning("Final audio for \(meetingId) is unreadable; rebuilding from segments")
+                try FileManager.default.removeItem(at: audioURL)
             }
 
             // Check for segment files

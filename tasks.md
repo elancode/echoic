@@ -75,6 +75,13 @@
 - [x] **T53** · Show speaker names inferred by the summary in the transcript and summary (`speaker_names` → meetingSpeaker labels) · **S**
 - [x] **T54** · Automatically stop recording when the call app releases the mic (setting, on by default) · **S**
 - [ ] **T55** · Backfill speaker names for meetings summarized before T53 (re-summarize or parse `participants`) · **S** · blocked-by: T53
+- [x] **T56** · Live insights agent: running recap, open concerns, and questions in a side panel of the Live Transcript window (rolling-state prompt, adaptive trigger, `liveInsight` table, Settings toggle + model) · **M** · blocked-by: T46
+- [ ] **T57** · Show saved live insights in MeetingDetailView (timeline of snapshots per meeting) · **S** · blocked-by: T56
+- [x] **T58** · Fix post-processing hang: WhisperKit `resampleAudio` loops forever on truncated audio → own 16 kHz loader; rebuild unreadable `audio.m4a` from segments; atomic concatenation · **S**
+- [x] **T59** · Model settings default to "Latest Opus (automatic)" (Models API lookup, 404 → newest in family); read text blocks after thinking blocks · **S** · blocked-by: T56
+- [ ] **T60** · Cap post-processing retries — meetings whose summary keeps failing are retried on every launch · **S**
+- [ ] **T63** · Fix remaining strict-concurrency warnings (`SWIFT_STRICT_CONCURRENCY=complete`): capture services sent across actors, `ModelDownloadManager` @Published mutated off-main, `DatabaseManager.shared` · **M**
+- [ ] **T64** · `chunkingStrategy: .none` in live transcription resolves to `Optional.none` (nil), not `ChunkingStrategy.none` — confirm intended · **S**
 
 ---
 
@@ -127,3 +134,5 @@
 - [x] **T50** · Mic transcribed as separate "You" track · completed 2026-11-10
 - [x] **T53** · Speaker names from summary shown in transcript · completed 2026-11-16
 - [x] **T54** · Auto-stop recording when call ends · completed 2026-11-16
+- [x] **T61** · Fix crash on Start Recording: mic tap installed with stale format after headset rate change raised an uncatchable ObjC exception; fresh AVAudioEngine per session + format validation · completed 2026-11-24
+- [x] **T62** · Make TranscriptionService thread-safe (lock-protected state, per-run loop IDs, no unload mid-inference) · completed 2026-11-24

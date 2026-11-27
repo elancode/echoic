@@ -5,13 +5,29 @@ import SwiftUI
 struct LiveTranscriptView: View {
     @ObservedObject private var coordinator = MeetingCoordinator.shared
     @State private var autoScroll = true
+    @AppStorage("showLiveInsightsPanel") private var showInsights = true
+    @AppStorage(MeetingCoordinator.liveInsightsSettingKey) private var liveInsightsEnabled = true
+
+    private var insightsVisible: Bool { liveInsightsEnabled && showInsights }
 
     var body: some View {
+        HSplitView {
+            transcript
+                .frame(minWidth: 320)
+            if insightsVisible {
+                LiveInsightsPanel()
+            }
+        }
+        .frame(minWidth: insightsVisible ? 600 : 360, minHeight: 300)
+    }
+
+    private var transcript: some View {
         VStack(spacing: 0) {
             LiveTranscriptHeader(
                 state: coordinator.state,
                 startedAt: coordinator.currentMeeting?.startedAt,
-                autoScroll: $autoScroll
+                autoScroll: $autoScroll,
+                showInsights: liveInsightsEnabled ? $showInsights : nil
             )
             Divider()
             if coordinator.liveSegments.isEmpty {
@@ -20,7 +36,6 @@ struct LiveTranscriptView: View {
                 LiveTranscriptList(segments: coordinator.liveSegments, autoScroll: autoScroll)
             }
         }
-        .frame(minWidth: 360, minHeight: 300)
     }
 }
 
@@ -30,6 +45,8 @@ private struct LiveTranscriptHeader: View {
     let state: MeetingState
     let startedAt: Int64?
     @Binding var autoScroll: Bool
+    /// `nil` when live insights are turned off in Settings.
+    let showInsights: Binding<Bool>?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -39,6 +56,16 @@ private struct LiveTranscriptHeader: View {
                 .toggleStyle(.checkbox)
                 .font(.system(size: 11))
                 .accessibilityLabel("Auto-scroll to newest transcript line")
+            if let showInsights {
+                Button {
+                    showInsights.wrappedValue.toggle()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .buttonStyle(.borderless)
+                .help(showInsights.wrappedValue ? "Hide insights" : "Show insights")
+                .accessibilityLabel(showInsights.wrappedValue ? "Hide insights panel" : "Show insights panel")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

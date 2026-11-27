@@ -79,14 +79,37 @@ enum AudioFileManager {
             throw AudioFileError.exportFailed
         }
 
-        session.outputURL = outputURL
+        // Export to a temporary file and move it into place only when complete, so an
+        // interrupted export (app quit, crash) never leaves a truncated audio.m4a behind.
+        let partialURL = outputURL.deletingLastPathComponent()
+            .appendingPathComponent("\(outputURL.deletingPathExtension().lastPathComponent).partial.m4a")
+        try? FileManager.default.removeItem(at: partialURL)
+
+        session.outputURL = partialURL
         session.outputFileType = .m4a
 
         await session.export()
 
         guard session.status == .completed else {
+            try? FileManager.default.removeItem(at: partialURL)
             throw AudioFileError.exportFailed
         }
+
+        if FileManager.default.fileExists(atPath: outputURL.path) {
+            _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: partialURL)
+        } else {
+            try FileManager.default.moveItem(at: partialURL, to: outputURL)
+        }
+    }
+
+    /// True if the file exists, opens as audio, and contains at least one frame.
+    /// Partially written .m4a files (no `moov` box) fail to open.
+    static func isReadableAudio(at url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let file = try? AVAudioFile(forReading: url) else {
+            return false
+        }
+        return file.length > 0
     }
 
     /// Cleans up segment files after successful concatenation.
