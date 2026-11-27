@@ -207,7 +207,7 @@ private struct APIKeyStep: View {
                     .foregroundColor(.green)
             }
 
-            Text("You can skip this step. Summaries won't be available without an API key, but transcription and diarization work locally.")
+            Text("You can skip this step. Using Amazon Bedrock instead? Skip it and set up Bedrock in Settings → Claude. Without a Claude provider, transcription and diarization still work locally.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

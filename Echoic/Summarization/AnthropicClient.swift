@@ -3,9 +3,10 @@ import os.log
 
 private let logger = Logger(subsystem: "com.echoic.app", category: "AnthropicClient")
 
-/// Client for the Anthropic API. Sends transcripts for summarization.
+/// Claude client for summaries and live insights. Builds Messages requests and parses
+/// responses; the provider (Claude API or Amazon Bedrock) handles endpoint and auth.
 /// Critical Rule #1: Only transcript text is sent. Audio stays local always.
-/// Critical Rule #3: API key from Keychain only.
+/// Critical Rule #3: Keys come from the Keychain only.
 final class AnthropicClient {
     /// UserDefaults key and default for the model used by live insights during a meeting.
     static let liveInsightsModelKey = "liveInsightsModel"
@@ -17,11 +18,9 @@ final class AnthropicClient {
 
     private let model: String
     private let liveInsightsModel: String
-    private let apiBaseURL = "https://api.anthropic.com/v1/messages"
-    private let apiVersion = "2023-06-01"
     private static let fallbackBeta = "server-side-fallback-2026-07-01"
     /// Models that accept `fallbacks: "default"`, which reroutes a request the model
-    /// declines (`stop_reason: "refusal"`) instead of failing it.
+    /// declines (`stop_reason: "refusal"`) instead of failing it. Claude API only.
     private static let fallbackModels: Set<String> = [
         "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-2",
     ]
@@ -29,20 +28,24 @@ final class AnthropicClient {
     static func supportsServerSideFallback(model: String) -> Bool {
         fallbackModels.contains(model)
     }
-    private let session: URLSession
-    private let resolver: ModelResolver
-    private let apiKey: () throws -> String
 
-    init(
-        session: URLSession = .shared,
+    private let provider: ClaudeProvider
+    private let resolver: ModelResolver
+
+    init(provider: ClaudeProvider = ClaudeProviders.current(), defaults: UserDefaults = .standard) {
+        self.provider = provider
+        self.resolver = ModelResolver(provider: provider, defaults: defaults)
+        self.model = defaults.string(forKey: Self.summarizationModelKey) ?? Self.defaultSummarizationModel
+        self.liveInsightsModel = defaults.string(forKey: Self.liveInsightsModelKey) ?? Self.defaultLiveInsightsModel
+    }
+
+    /// Claude API client (kept for callers and tests that pass a session and key).
+    convenience init(
+        session: URLSession,
         defaults: UserDefaults = .standard,
         apiKey: @escaping () throws -> String = KeychainService.retrieveAPIKey
     ) {
-        self.session = session
-        self.apiKey = apiKey
-        self.resolver = ModelResolver(session: session, defaults: defaults, apiKey: apiKey)
-        self.model = defaults.string(forKey: Self.summarizationModelKey) ?? Self.defaultSummarizationModel
-        self.liveInsightsModel = defaults.string(forKey: Self.liveInsightsModelKey) ?? Self.defaultLiveInsightsModel
+        self.init(provider: AnthropicAPIProvider(session: session, apiKey: apiKey), defaults: defaults)
     }
 
     /// Sends a transcript for summarization and returns structured JSON.
@@ -66,15 +69,13 @@ final class AnthropicClient {
     /// Resolves the model setting and sends the message. If the model no longer exists
     /// (HTTP 404, e.g. retired), retries once with the newest model in the same family.
     private func send(systemPrompt: String, userMessage: String, modelSetting: String, maxTokens: Int) async throws -> String {
-        let model = await resolver.resolve(modelSetting)
+        guard let model = await resolver.resolve(modelSetting) else { throw AnthropicError.noModelAvailable }
         do {
             return try await sendMessage(systemPrompt: systemPrompt, userMessage: userMessage, model: model, maxTokens: maxTokens)
         } catch AnthropicError.httpError(let statusCode, let body) where statusCode == 404 {
-            guard let family = ModelResolver.family(of: model) else {
-                throw AnthropicError.httpError(statusCode: statusCode, body: body)
-            }
-            let replacement = await resolver.resolve(ModelResolver.automatic(family), forceRefresh: true)
-            guard replacement != model else {
+            guard let family = ModelResolver.family(of: model),
+                  let replacement = await resolver.resolve(ModelResolver.automatic(family), forceRefresh: true),
+                  replacement != model else {
                 throw AnthropicError.httpError(statusCode: statusCode, body: body)
             }
             logger.warning("Model \(model, privacy: .public) unavailable; retrying with \(replacement, privacy: .public)")
@@ -89,50 +90,6 @@ final class AnthropicClient {
 
     /// Sends a single-turn message and returns the response text.
     func sendMessage(systemPrompt: String, userMessage: String, model: String, maxTokens: Int) async throws -> String {
-        let apiKey = try apiKey()
-
-        let request = try buildRequest(
-            apiKey: apiKey,
-            model: model,
-            maxTokens: maxTokens,
-            systemPrompt: systemPrompt,
-            userMessage: userMessage
-        )
-
-        let (data, response) = try await session.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AnthropicError.invalidResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            throw AnthropicError.httpError(statusCode: httpResponse.statusCode, body: String(data: data, encoding: .utf8))
-        }
-
-        return try Self.extractText(data)
-    }
-
-    // MARK: - Request Building
-
-    private func buildRequest(
-        apiKey: String,
-        model: String,
-        maxTokens: Int,
-        systemPrompt: String,
-        userMessage: String
-    ) throws -> URLRequest {
-        guard let url = URL(string: apiBaseURL) else {
-            throw AnthropicError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        // Thinking models can take minutes on a long transcript; the 60s default is too short.
-        request.timeoutInterval = 600
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
-
         var body: [String: Any] = [
             "model": model,
             "max_tokens": maxTokens,
@@ -141,14 +98,12 @@ final class AnthropicClient {
                 ["role": "user", "content": userMessage]
             ]
         ]
-
-        if Self.supportsServerSideFallback(model: model) {
-            request.setValue(Self.fallbackBeta, forHTTPHeaderField: "anthropic-beta")
+        var betas: [String] = []
+        if provider.supportsServerSideFallback, Self.supportsServerSideFallback(model: model) {
+            betas.append(Self.fallbackBeta)
             body["fallbacks"] = "default"
         }
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return request
+        return try Self.extractText(try await provider.send(body: body, model: model, betas: betas))
     }
 
     // MARK: - Response Parsing
@@ -192,33 +147,11 @@ final class AnthropicClient {
         return try JSONDecoder().decode(T.self, from: jsonData)
     }
 
-    /// Validates an API key by making a minimal request.
+    /// Validates a Claude API key by making a minimal request.
     func validateAPIKey(_ key: String) async throws -> Bool {
-        guard let url = URL(string: apiBaseURL) else { return false }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(key, forHTTPHeaderField: "x-api-key")
-        request.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
-
-        let body: [String: Any] = [
-            // Only the auth result matters; use a concrete ID without a network lookup.
-            "model": ModelResolver.family(of: model).flatMap { ModelResolver.builtInDefaults[$0] } ?? model,
-            "max_tokens": 1,
-            "messages": [
-                ["role": "user", "content": "hi"]
-            ]
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (_, response) = try await session.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else { return false }
-
-        // 200 = valid, 401 = invalid key, others = valid key but other issue
-        return httpResponse.statusCode != 401
+        // Only the auth result matters; use a concrete ID without a network lookup.
+        let concrete = ModelResolver.family(of: model).flatMap { ModelResolver.builtInDefaults[$0] } ?? model
+        return try await AnthropicAPIProvider().validate(key: key, model: concrete)
     }
 }
 
@@ -234,6 +167,10 @@ struct SummaryResponse: Codable {
     let decisions: [Decision]
     let actionItems: [ActionItem]
     let notableQuotes: [NotableQuote]?
+    /// Questions raised but not resolved. Absent in summaries made before this field existed.
+    let openQuestions: [String]?
+    /// Topics in the order discussed, each with where it starts.
+    let topics: [Topic]?
     /// Names inferred for diarized speakers, keyed by speaker label (e.g. "speaker_1").
     let speakerNames: [String: String]?
 
@@ -247,6 +184,8 @@ struct SummaryResponse: Codable {
         case decisions
         case actionItems = "action_items"
         case notableQuotes = "notable_quotes"
+        case openQuestions = "open_questions"
+        case topics
         case speakerNames = "speaker_names"
     }
 
@@ -267,6 +206,16 @@ struct SummaryResponse: Codable {
         let due: String?
     }
 
+    struct Topic: Codable {
+        let topic: String
+        let timestampMs: Int64?
+
+        enum CodingKeys: String, CodingKey {
+            case topic
+            case timestampMs = "timestamp_ms"
+        }
+    }
+
     struct NotableQuote: Codable {
         let quote: String
         let speaker: String?
@@ -283,18 +232,22 @@ enum AnthropicError: LocalizedError {
     case parseError
     case rateLimited(retryAfter: TimeInterval?)
     case serverError
+    /// No model could be resolved (e.g. Bedrock with no Claude models available yet).
+    case noModelAvailable
 }
 
 extension AnthropicError {
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid Anthropic API URL"
-        case .invalidResponse: return "Invalid response from the Anthropic API"
+        case .invalidURL: return "Invalid Claude endpoint URL. Check the Bedrock region in Settings."
+        case .invalidResponse: return "Invalid response from Claude"
         case .httpError(let statusCode, let body):
-            return "Anthropic API returned HTTP \(statusCode): \(body?.prefix(300) ?? "")"
-        case .parseError: return "Couldn't parse the Anthropic API response"
-        case .rateLimited: return "Rate limited by the Anthropic API"
-        case .serverError: return "Anthropic API server error"
+            return "Claude request failed (HTTP \(statusCode)): \(body?.prefix(300) ?? "")"
+        case .parseError: return "Couldn't parse Claude's response"
+        case .rateLimited: return "Rate limited by the Claude provider"
+        case .serverError: return "Claude provider server error"
+        case .noModelAvailable:
+            return "No Claude model is available. On Amazon Bedrock, check the region and that Claude models are enabled for your account."
         }
     }
 }

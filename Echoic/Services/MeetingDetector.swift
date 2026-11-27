@@ -13,8 +13,12 @@ enum MeetingPrompt: Equatable {
 }
 
 /// Watches microphone activity by other apps to offer starting a recording when
-/// a call begins and stopping it when the call ends — via a notification with
-/// action buttons and a prompt row in the menu bar popover.
+/// a call begins and stopping it when the call ends.
+///
+/// A call start is offered on exactly one surface (call-detection handover §2):
+/// the floating prompt panel when the menu is closed, or the menu's on-a-call
+/// state when it is open. See `CallPromptRouter`. Stopping (when auto-stop is
+/// off) is still offered as a system notification.
 @MainActor
 final class MeetingDetector: ObservableObject {
     static let shared = MeetingDetector()
@@ -23,27 +27,30 @@ final class MeetingDetector: ObservableObject {
     static let autoStopSettingsKey = "autoStopRecordingWhenCallEnds"
 
     enum NotificationIds {
-        static let startCategory = "MEETING_DETECTED"
         static let stopCategory = "MEETING_ENDED"
-        static let startAction = "START_RECORDING"
         static let stopAction = "STOP_RECORDING"
         static let dismissAction = "DISMISS"
-        static let startRequest = "meeting-detected"
         static let stopRequest = "meeting-ended"
         static let autoStopRequest = "recording-auto-stopped"
+        /// Posted by builds before the call prompt panel; removed on launch.
+        static let legacyStartRequest = "meeting-detected"
     }
 
     /// The prompt currently being offered, if any.
     @Published private(set) var prompt: MeetingPrompt?
 
     private var startPolicy = MeetingDetectionPolicy(minimumActiveDuration: 5)
+    private var router = CallPromptRouter()
+    private let panel: CallPromptPresenting
     private var endPolicy = MeetingEndDetectionPolicy(minimumInactiveDuration: 10)
-    /// Most recent app seen using the mic during the current recording.
-    private var callAppName: String?
+    /// Most recent app seen using the mic during the current recording ("Zoom").
+    @Published private(set) var recordingAppName: String?
     private var monitorTask: Task<Void, Never>?
     private static let pollInterval: UInt64 = 2_000_000_000 // 2s
 
-    private init() {}
+    private init(panel: CallPromptPresenting = CallPromptPanelController.shared) {
+        self.panel = panel
+    }
 
     /// Whether detection is enabled in Settings (on by default).
     static var isEnabled: Bool {
@@ -52,6 +59,7 @@ final class MeetingDetector: ObservableObject {
 
     func start() {
         guard monitorTask == nil else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [NotificationIds.legacyStartRequest])
         monitorTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.poll()
@@ -71,6 +79,48 @@ final class MeetingDetector: ObservableObject {
         defaults.object(forKey: autoStopSettingsKey) as? Bool ?? true
     }
 
+    /// The app on the call while a start prompt is up ("You're on a Zoom call").
+    var callAppName: String? {
+        if case .start(let usage) = prompt { return usage.appName }
+        return nil
+    }
+
+    /// Whether a call is detected and waiting for an answer (menu shows its on-a-call state).
+    var isOnUnansweredCall: Bool {
+        if case .start = prompt { return true }
+        return false
+    }
+
+    // MARK: - Menu
+
+    /// The menu bar popover opened: it takes over from the prompt panel.
+    func menuOpened() {
+        perform(router.menuOpened())
+    }
+
+    /// The menu closed. Closing it without recording declines the call.
+    func menuClosed() {
+        perform(router.menuClosed())
+    }
+
+    private func perform(_ effects: [CallPromptRouter.Effect]) {
+        for effect in effects {
+            switch effect {
+            case .showPanel:
+                let text = CallPromptRouter.promptText(appName: callAppName)
+                panel.show(
+                    title: text.title, subtitle: text.subtitle,
+                    onRecord: { [weak self] in self?.acceptPrompt() },
+                    onClose: { [weak self] in self?.dismissPrompt() }
+                )
+            case .hidePanel:
+                panel.hide()
+            case .decline:
+                dismissPrompt()
+            }
+        }
+    }
+
     // MARK: - User Responses
 
     /// Performs the prompt's action (start or stop recording).
@@ -80,6 +130,7 @@ final class MeetingDetector: ObservableObject {
         let coordinator = MeetingCoordinator.shared
         switch current {
         case .start:
+            // Same start action as every other Start control, using the ticked sources.
             coordinator.databaseWriter = DatabaseManager.shared.databaseWriter
             Task { await coordinator.startRecording() }
         case .stop:
@@ -87,7 +138,8 @@ final class MeetingDetector: ObservableObject {
         }
     }
 
-    /// Dismisses the prompt without acting ("Not Now" / "Keep Recording").
+    /// Dismisses the prompt without acting ("Not now" / "Keep Recording").
+    /// A dismissed start prompt doesn't come back for this call.
     func dismissPrompt() {
         if case .start = prompt {
             // Model was preloaded for this prompt; let it unload if unused
@@ -99,12 +151,10 @@ final class MeetingDetector: ObservableObject {
     /// Handles a notification button press. Ignores stale notifications whose
     /// category no longer matches the visible prompt.
     func handleNotificationResponse(category: String, action: String) {
-        guard let current = prompt else { return }
-        let expectedCategory = current.kind == .start ? NotificationIds.startCategory : NotificationIds.stopCategory
-        guard category == expectedCategory else { return }
+        guard case .stop = prompt, category == NotificationIds.stopCategory else { return }
 
         switch action {
-        case NotificationIds.startAction, NotificationIds.stopAction:
+        case NotificationIds.stopAction:
             acceptPrompt()
         case NotificationIds.dismissAction, UNNotificationDismissActionIdentifier:
             dismissPrompt()
@@ -132,15 +182,15 @@ final class MeetingDetector: ObservableObject {
         let now = Date()
 
         if isRecording, usage.isInUse, let name = usage.appName {
-            callAppName = name
+            recordingAppName = name
         } else if !isRecording {
-            callAppName = nil
+            recordingAppName = nil
         }
 
         apply(startPolicy.update(micInUse: usage.isInUse, canRecord: canRecord, now: now),
               prompt: .start(usage))
         apply(endPolicy.update(micInUse: usage.isInUse, isRecording: isRecording, now: now),
-              prompt: .stop(appName: callAppName))
+              prompt: .stop(appName: recordingAppName))
     }
 
     private func apply(_ action: MeetingDetectionPolicy.Action, prompt newPrompt: MeetingPrompt) {
@@ -155,11 +205,17 @@ final class MeetingDetector: ObservableObject {
             if case .start = newPrompt {
                 // Warm the model now so recording starts transcribing immediately
                 Task { try? await MeetingCoordinator.shared.prepareTranscriptionModel() }
+                perform(router.callDetected())
+            } else {
+                Task { await postNotification(for: newPrompt) }
             }
-            Task { await postNotification(for: newPrompt) }
         case .dismissPrompt:
+            // The call ended (or recording started elsewhere): the prompt goes away.
             if prompt?.kind == newPrompt.kind {
                 prompt = nil
+            }
+            if newPrompt.kind == .start {
+                perform(router.promptEnded())
             }
             if newPrompt.kind == .start, MeetingCoordinator.shared.state != .recording {
                 // Call ended without recording; release the preloaded model later
@@ -184,26 +240,25 @@ final class MeetingDetector: ObservableObject {
 
     private func hidePrompt() {
         guard let current = prompt else { return }
-        switch current {
-        case .start: startPolicy.promptHandled()
-        case .stop: endPolicy.promptHandled()
-        }
         prompt = nil
-        removeNotification(for: current)
+        switch current {
+        case .start:
+            startPolicy.promptHandled()
+            perform(router.promptEnded())
+        case .stop:
+            endPolicy.promptHandled()
+            removeNotification(for: current)
+        }
     }
 
     // MARK: - Notifications
 
+    /// Only stop prompts use notifications; start prompts use the panel or the menu.
     private func postNotification(for prompt: MeetingPrompt) async {
-        let text = Self.notificationText(for: prompt)
-        switch prompt {
-        case .start:
-            await postNotification(title: text.title, body: text.body, requestId: NotificationIds.startRequest,
-                                   category: NotificationIds.startCategory)
-        case .stop:
-            await postNotification(title: text.title, body: text.body, requestId: NotificationIds.stopRequest,
-                                   category: NotificationIds.stopCategory)
-        }
+        guard case .stop(let appName) = prompt else { return }
+        let text = Self.stopNotificationText(appName: appName)
+        await postNotification(title: text.title, body: text.body, requestId: NotificationIds.stopRequest,
+                               category: NotificationIds.stopCategory)
     }
 
     private func postNotification(title: String, body: String, requestId: String, category: String? = nil) async {
@@ -227,18 +282,12 @@ final class MeetingDetector: ObservableObject {
         }
     }
 
-    /// Notification wording. Names Echoic explicitly, since the banner may not
-    /// otherwise make clear which app is asking.
-    nonisolated static func notificationText(for prompt: MeetingPrompt) -> (title: String, body: String) {
-        switch prompt {
-        case .start(let usage):
-            let what = usage.appName.map { "\($0) is using your microphone." } ?? "Your microphone is in use."
-            return ("Meeting detected", "\(what) Should Echoic start recording?")
-        case .stop(let appName):
-            let what = appName.map { "\($0) stopped using your microphone." }
-                ?? "Your microphone is no longer in use."
-            return ("Meeting ended?", "\(what) Should Echoic stop recording?")
-        }
+    /// Stop notification wording. Names Echoic explicitly, since the banner may
+    /// not otherwise make clear which app is asking.
+    nonisolated static func stopNotificationText(appName: String?) -> (title: String, body: String) {
+        let what = appName.map { "\($0) stopped using your microphone." }
+            ?? "Your microphone is no longer in use."
+        return ("Meeting ended?", "\(what) Should Echoic stop recording?")
     }
 
     nonisolated static func autoStopNotificationText(appName: String?) -> (title: String, body: String) {
@@ -247,7 +296,8 @@ final class MeetingDetector: ObservableObject {
     }
 
     private func removeNotification(for prompt: MeetingPrompt) {
-        let id = prompt.kind == .start ? NotificationIds.startRequest : NotificationIds.stopRequest
+        guard prompt.kind == .stop else { return }
+        let id = NotificationIds.stopRequest
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])
         center.removePendingNotificationRequests(withIdentifiers: [id])
@@ -255,16 +305,6 @@ final class MeetingDetector: ObservableObject {
 
     /// Registers notification categories with their action buttons.
     static func registerNotificationCategories() {
-        let dismissStart = UNNotificationAction(identifier: NotificationIds.dismissAction, title: "Not Now", options: [])
-        let startCategory = UNNotificationCategory(
-            identifier: NotificationIds.startCategory,
-            actions: [
-                UNNotificationAction(identifier: NotificationIds.startAction, title: "Start Recording", options: []),
-                dismissStart,
-            ],
-            intentIdentifiers: [],
-            options: [.customDismissAction]
-        )
         let stopCategory = UNNotificationCategory(
             identifier: NotificationIds.stopCategory,
             actions: [
@@ -274,12 +314,12 @@ final class MeetingDetector: ObservableObject {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([startCategory, stopCategory])
+        UNUserNotificationCenter.current().setNotificationCategories([stopCategory])
     }
 
     /// Whether a notification category belongs to the meeting detector.
     nonisolated static func handles(category: String) -> Bool {
-        category == NotificationIds.startCategory || category == NotificationIds.stopCategory
+        category == NotificationIds.stopCategory
     }
 }
 

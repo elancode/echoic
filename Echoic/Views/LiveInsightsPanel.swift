@@ -1,190 +1,172 @@
 import SwiftUI
 
-/// Side panel in the Live Transcript window: a running recap plus the open
-/// concerns and questions in the current discussion, from the live insights agent.
+/// Insights panel in the Live Transcript window: the goal field, then the live
+/// insights agent's recap, open concerns and questions (live transcript handover §5,
+/// with today's insight content).
 struct LiveInsightsPanel: View {
     @ObservedObject private var coordinator = MeetingCoordinator.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            LiveInsightsHeader(
-                status: coordinator.liveInsightsStatus,
-                updatedAt: coordinator.liveInsight.map { Date(timeIntervalSince1970: Double($0.createdAt) / 1000) },
-                canRefresh: coordinator.state == .recording
-                    && [.waiting, .failed].contains(coordinator.liveInsightsStatus),
-                onRefresh: coordinator.refreshInsights
-            )
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    MeetingContextField(text: $coordinator.meetingContextNote)
-                    if let insight = coordinator.liveInsight {
-                        LiveInsightContent(insight: insight)
-                    } else {
-                        LiveInsightsEmptyState(status: coordinator.liveInsightsStatus)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                InsightsTitleRow(
+                    status: coordinator.liveInsightsStatus,
+                    updatedAt: coordinator.liveInsight.map { Date(timeIntervalSince1970: Double($0.createdAt) / 1000) },
+                    canRefresh: coordinator.state == .recording
+                        && [.waiting, .failed].contains(coordinator.liveInsightsStatus),
+                    onRefresh: coordinator.refreshInsights
+                )
+                GoalField(text: $coordinator.meetingContextNote)
+                if let insight = coordinator.liveInsight {
+                    InsightContent(insight: insight)
+                } else {
+                    Text(emptyMessage)
+                        .font(.inter(14))
+                        .foregroundColor(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(14)
-                .textSelection(.enabled)
             }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
         }
-        .frame(minWidth: 240, idealWidth: 300)
+        .background(Theme.ground)
+        .overlay(alignment: .leading) { Rectangle().fill(Theme.borderSoft).frame(width: 1) }
+    }
+
+    private var emptyMessage: String {
+        switch coordinator.liveInsightsStatus {
+        case .needsAPIKey: return "Set up Claude in Settings → Claude to get live insights."
+        case .disabled: return "Insights appear here while a meeting is being recorded."
+        case .waiting, .updating: return "Insights appear after a minute or two of discussion."
+        case .failed: return "Couldn't reach Claude. Insights will retry on the next cycle."
+        }
     }
 }
 
-// MARK: - Header
+// MARK: - Title row
 
-private struct LiveInsightsHeader: View {
+private struct InsightsTitleRow: View {
     let status: LiveInsightsStatus
     let updatedAt: Date?
     let canRefresh: Bool
     let onRefresh: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "sparkles")
-                .foregroundColor(.accentColor)
-                .accessibilityHidden(true)
-            Text("Insights")
-                .font(.system(size: 12, weight: .medium))
+        HStack(spacing: 8) {
+            Text("Insights").font(.display(16)).foregroundColor(Theme.ink).accessibilityAddTraits(.isHeader)
             Spacer()
-            statusLabel
+            statusText
             Button(action: onRefresh) {
                 Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(!canRefresh)
-            .help("Update insights now")
+            .opacity(canRefresh ? 1 : 0.4)
             .accessibilityLabel("Update insights now")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
     }
 
     @ViewBuilder
-    private var statusLabel: some View {
+    private var statusText: some View {
         switch status {
         case .updating:
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityLabel("Updating insights")
+            Text("Updating…").font(.mono(11)).foregroundColor(Theme.textMuted)
         case .failed:
-            Text("Couldn't update. Retrying next cycle.")
-                .font(.system(size: 10))
-                .foregroundColor(.orange)
+            Text("Couldn't update").font(.mono(11)).foregroundColor(Theme.accentText)
         case .waiting, .disabled, .needsAPIKey:
             if let updatedAt {
-                (Text("Updated ") + Text(updatedAt, style: .relative) + Text(" ago"))
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                TimelineView(.periodic(from: .now, by: 10)) { context in
+                    Text("Updated \(Self.ago(updatedAt, now: context.date))")
+                        .font(.mono(11))
+                        .foregroundColor(Theme.textMuted)
+                }
             }
         }
     }
+
+    /// "20 s ago", "3 min ago".
+    static func ago(_ date: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "\(max(seconds / 10 * 10, 5)) s ago" }
+        return "\(seconds / 60) min ago"
+    }
 }
 
-// MARK: - Context Note
+// MARK: - Goal
 
-private struct MeetingContextField: View {
+private struct GoalField: View {
     @Binding var text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("What's this meeting about?")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.secondary)
-            TextField("Optional, e.g. \"Decide the Q3 launch date\"", text: $text, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
-                .lineLimit(1...3)
-                .accessibilityLabel("Meeting context for insights")
+        VStack(alignment: .leading, spacing: 6) {
+            GroupLabel("Goal for this meeting")
+            TextField("Optional, e.g. Decide the launch date", text: $text)
+                .textFieldStyle(.plain)
+                .font(.inter(13))
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).fill(Theme.surface))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .strokeBorder(Theme.border, lineWidth: 1)
+                )
+                .accessibilityLabel("Goal for this meeting")
         }
     }
 }
 
 // MARK: - Content
 
-private struct LiveInsightContent: View {
+private struct InsightContent: View {
     let insight: LiveInsight
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            InsightSection(title: "Recap", systemImage: "text.alignleft") {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupLabel("So far")
                 Text(insight.recap)
-                    .font(.system(size: 12))
+                    .font(.inter(15))
+                    .lineSpacing(5)
+                    .foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            InsightSection(title: "Open concerns", systemImage: "exclamationmark.triangle") {
-                InsightList(items: insight.concerns, emptyText: "No open concerns right now.")
-            }
-            InsightSection(title: "Questions", systemImage: "questionmark.bubble") {
-                InsightList(items: insight.questions, emptyText: "No open questions right now.")
-            }
+            InsightCards(title: "Open concerns", items: insight.concerns)
+            InsightCards(title: "Open questions", items: insight.questions)
         }
     }
 }
 
-private struct InsightSection<Content: View>: View {
+/// "OPEN QUESTIONS · 2" over white cards; "None yet." when empty.
+private struct InsightCards: View {
     let title: String
-    let systemImage: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-            content
-        }
-    }
-}
-
-private struct InsightList: View {
     let items: [String]
-    let emptyText: String
 
     var body: some View {
-        if items.isEmpty {
-            Text(emptyText)
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            GroupLabel("\(title) · \(items.count)")
+            if items.isEmpty {
+                Text("None yet.").font(.inter(14)).foregroundColor(Theme.textMuted)
+            } else {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("•").foregroundColor(.secondary)
-                        Text(item)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .font(.system(size: 12))
+                    Text(item)
+                        .font(.inter(14))
+                        .foregroundColor(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous).fill(Theme.surface))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                                .strokeBorder(Theme.borderSoft, lineWidth: 1)
+                        )
                 }
             }
-        }
-    }
-}
-
-// MARK: - Empty State
-
-private struct LiveInsightsEmptyState: View {
-    let status: LiveInsightsStatus
-
-    var body: some View {
-        Text(message)
-            .font(.system(size: 12))
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var message: String {
-        switch status {
-        case .needsAPIKey:
-            return "Add an Anthropic API key in Settings to get live insights."
-        case .disabled:
-            return "Insights appear here while a meeting is being recorded."
-        case .waiting, .updating:
-            return "Insights appear after a minute or two of discussion."
-        case .failed:
-            return "Couldn't reach Claude. Insights will retry on the next cycle."
         }
     }
 }

@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             object: nil
         )
 
+        // Tests run inside the app; don't watch the mic or touch user data.
+        guard !AppEnvironment.isHostingTests else { return }
+
         // Offer to record when another app starts using the microphone
         UNUserNotificationCenter.current().delegate = self
         MeetingDetector.registerNotificationCategories()
@@ -30,10 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         // Fetch and prewarm the lighter Large v3 Turbo model if needed (one-time,
         // ~1.6 GB + ~3 min Neural Engine compile). Skipped when hosting unit tests.
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-            Task.detached(priority: .background) {
-                await ModelDownloadManager.shared.prepareRecommendedModelIfNeeded()
-            }
+        Task.detached(priority: .background) {
+            await ModelDownloadManager.shared.prepareRecommendedModelIfNeeded()
         }
     }
 

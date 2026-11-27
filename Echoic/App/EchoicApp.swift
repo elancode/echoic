@@ -11,6 +11,14 @@ struct EchoicApp: App {
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "onboardingComplete")
 
     init() {
+        // Bundled Inter, Space Grotesk and JetBrains Mono (falls back to system fonts)
+        FontRegistry.registerBundledFonts()
+
+        // Unit tests run inside this app. Never open the user's real database or
+        // "recover" their meetings from a test host: a test run during a live
+        // recording would mark it as crashed and try to post-process it.
+        guard !AppEnvironment.isHostingTests else { return }
+
         // Initialize database on launch
         try? DatabaseManager.shared.setup()
 
@@ -93,7 +101,8 @@ struct EchoicApp: App {
         Window("Settings", id: "settings") {
             SettingsView()
         }
-        .defaultSize(width: 500, height: 350)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
 
         Window("Meeting Library", id: "library") {
             MeetingLibraryView()
@@ -101,11 +110,12 @@ struct EchoicApp: App {
                     OnboardingView()
                 }
         }
+        .windowStyle(.hiddenTitleBar)
 
         Window("Live Transcript", id: "live-transcript") {
             LiveTranscriptView()
         }
-        .defaultSize(width: 760, height: 560)
+        .defaultSize(width: 1200, height: 780)
 
         MenuBarExtra {
             MenuBarPopoverView()

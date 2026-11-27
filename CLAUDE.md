@@ -1,6 +1,6 @@
 # Echoic
 
-Native macOS meeting companion — captures system audio via ScreenCaptureKit, transcribes with WhisperKit (CoreML), diarizes with SpeakerKit, summarizes via Anthropic API. Swift + SwiftUI, single-process, menu bar app.
+Native macOS meeting companion — captures system audio via ScreenCaptureKit, transcribes with WhisperKit (CoreML), diarizes with SpeakerKit, summarizes with Claude via the Anthropic API or Amazon Bedrock. Swift + SwiftUI, single-process, menu bar app.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Echoic/
 ├── Audio/                  # ScreenCaptureKit capture, AVAudioEngine mic, ring buffer, AAC encoding
 ├── Transcription/          # WhisperKit integration, chunked inference, VAD, dedup
 ├── Diarization/            # SpeakerKit integration, speaker merge, local speaker ID
-├── Summarization/          # Anthropic API client, prompt templates, retry logic
+├── Summarization/          # Claude client, providers (Anthropic API, Amazon Bedrock), prompt templates, retry logic
 ├── Storage/                # GRDB.swift database, migrations, FTS5 search, file management
 ├── Models/                 # Swift data models (Meeting, TranscriptSegment, Summary, Speaker)
 ├── Views/                  # SwiftUI views — Library, MeetingDetail, Settings, Onboarding
@@ -81,21 +81,22 @@ xcodebuild test -scheme Echoic -only-testing EchoicTests/StorageTests/testInsert
   - `SpeakerKit` (argmaxinc) — diarization
   - `GRDB.swift` (groue) — SQLite + FTS5
   - `Sparkle` — auto-update
+  - `aws-sdk-swift` (awslabs) — `AWSBedrockRuntime`, `AWSBedrock`, `AWSSDKIdentity` for Bedrock with AWS profiles (SigV4, SSO, `credential_process`). Its `smithy-swift` build plugin must be trusted once in Xcode ("Trust & Enable").
 - **IDs:** ULIDs for all meeting IDs (time-sortable, string-sortable in SQLite)
 - **Audio format:** 48 kHz capture → 16 kHz mono for WhisperKit. Storage as AAC in .m4a container.
-- **Secrets:** macOS Keychain via `Security.framework` only. Never store API keys in UserDefaults, plists, or files.
+- **Secrets:** macOS Keychain via `Security.framework` only. Never store API keys in UserDefaults, plists, or files. AWS credentials are never stored by Echoic; they're resolved per request from the user's AWS profile.
 
 ## Critical Rules
 
-1. **Never upload raw audio.** Only transcript text is sent to the Anthropic API. Audio stays local always.
-2. **Single-process architecture.** No sidecars, no XPC services, no helper processes. WhisperKit and SpeakerKit run in-process.
-3. **Keychain-only secrets.** API keys go in macOS Keychain. Never write secrets to disk, logs, or UserDefaults.
+1. **Never upload raw audio.** Only transcript text is sent to the configured Claude provider (Anthropic API or Amazon Bedrock). Audio stays local always.
+2. **Single-process architecture.** No sidecars, no XPC services, no helper processes. WhisperKit and SpeakerKit run in-process. One exception: when the user picks an AWS profile that uses `credential_process`, the AWS SDK runs that command briefly to fetch credentials. Echoic never launches long-running helpers.
+3. **Keychain-only secrets.** API keys (Anthropic, Bedrock) go in macOS Keychain. Never write secrets to disk, logs, or UserDefaults.
 4. **No force unwraps** (`!`) in production code. Use `guard let`, `if let`, or `try?` with fallback.
 5. **No blocking the main thread.** All audio capture, transcription, diarization, and API calls run on background tasks via `async/await`.
 6. **Screen Recording permission** is for audio capture only. Never capture video/screen content.
 7. **GRDB migrations are append-only.** Never modify an existing migration. Add a new one.
 8. **AAC audio segments** must be flushed to disk every 30 seconds during recording. A crash must not lose more than 30 seconds of audio.
-9. **Anthropic API retries** use exponential backoff with jitter (max 5 min between retries, 3 attempts). Never retry without backoff.
+9. **Claude API retries** (either provider) use exponential backoff with jitter (max 5 min between retries, 3 attempts). Never retry without backoff.
 10. **Meeting data belongs to the user.** Files are standard formats (SQLite, AAC, JSON) in a user-accessible directory.
 
 ## Task Workflow

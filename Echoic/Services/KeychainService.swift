@@ -99,3 +99,21 @@ extension KeychainService {
         try delete(account: apiKeyAccount)
     }
 }
+
+// MARK: - Convenience for the Bedrock API key
+
+extension KeychainService {
+    private static let bedrockAPIKeyAccount = "bedrock-api-key"
+
+    static func saveBedrockAPIKey(_ key: String) throws {
+        try save(account: bedrockAPIKeyAccount, value: key)
+    }
+
+    static func retrieveBedrockAPIKey() throws -> String {
+        try retrieve(account: bedrockAPIKeyAccount)
+    }
+
+    static func deleteBedrockAPIKey() throws {
+        try delete(account: bedrockAPIKeyAccount)
+    }
+}

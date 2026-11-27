@@ -87,4 +87,31 @@ final class AudioFileLoaderTests: XCTestCase {
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.contains("partial") }
         XCTAssertTrue(leftovers.isEmpty)
     }
+
+    /// The last segment of a recording that was interrupted (app quit, crash) is
+    /// never finalized. It must cost at most that segment, not the whole meeting.
+    func test_concatenateSegments_unfinalizedLastSegment_skipsItAndKeepsTheRest() async throws {
+        let first = try writeAAC(seconds: 1, name: "segment_0001.m4a")
+        let second = try writeAAC(seconds: 1, name: "segment_0002.m4a")
+        let broken = try writeAAC(seconds: 1, name: "segment_0003.m4a")
+        try Data(contentsOf: broken).prefix(40).write(to: broken)
+        let output = directory.appendingPathComponent("audio.m4a")
+
+        try await AudioFileManager.concatenateSegments([first, second, broken], to: output)
+
+        let samples = try AudioFileLoader.loadMono16k(from: output)
+        XCTAssertEqual(Double(samples.count), 2 * 16_000, accuracy: 16_000 * 0.2)
+    }
+
+    func test_concatenateSegments_noReadableSegments_throws() async throws {
+        let broken = try writeAAC(seconds: 1, name: "segment_0001.m4a")
+        try Data(contentsOf: broken).prefix(40).write(to: broken)
+
+        do {
+            try await AudioFileManager.concatenateSegments([broken], to: directory.appendingPathComponent("audio.m4a"))
+            XCTFail("Expected an error when no segment is readable")
+        } catch {
+            XCTAssertEqual(error as? AudioFileError, .noReadableSegments)
+        }
+    }
 }

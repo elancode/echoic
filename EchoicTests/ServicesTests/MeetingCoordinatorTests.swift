@@ -24,4 +24,26 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertFalse(MeetingCoordinator.transcribesMicrophone(defaults: defaults))
     }
+
+    // MARK: - Sources ("Listening to" checkboxes)
+
+    func test_capturesMeetingAudio_settingNeverChanged_defaultsToTrue() {
+        XCTAssertTrue(MeetingCoordinator.capturesMeetingAudio(defaults: defaults))
+    }
+
+    func test_recordingMode_bothSources_isSystemAudio() {
+        XCTAssertEqual(MeetingCoordinator.recordingMode(meetingAudio: true, microphone: true), .systemAudio)
+    }
+
+    func test_recordingMode_meetingAudioOnly_isSystemAudio() {
+        XCTAssertEqual(MeetingCoordinator.recordingMode(meetingAudio: true, microphone: false), .systemAudio)
+    }
+
+    func test_recordingMode_microphoneOnly_isMicrophone() {
+        XCTAssertEqual(MeetingCoordinator.recordingMode(meetingAudio: false, microphone: true), .microphone)
+    }
+
+    func test_recordingMode_noSources_isNil() {
+        XCTAssertNil(MeetingCoordinator.recordingMode(meetingAudio: false, microphone: false))
+    }
 }

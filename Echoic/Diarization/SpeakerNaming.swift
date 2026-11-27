@@ -18,6 +18,21 @@ enum SpeakerNaming {
         }
     }
 
+    /// Sets a speaker's label to a name the user typed. Blank names are ignored.
+    static func rename(speakerId: String, to rawName: String, meetingId: String, db: Database) throws {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        try db.execute(
+            sql: "UPDATE meetingSpeaker SET label = ? WHERE meetingId = ? AND speakerId = ?",
+            arguments: [name, meetingId, speakerId]
+        )
+    }
+
+    /// Whether a speaker still has its default "Speaker N" label. "You" is never unnamed.
+    static func isUnnamed(speakerId: String, label: String) -> Bool {
+        speakerId != TranscriptSegment.localSpeakerId && label == SpeakerMerge.defaultLabel(for: speakerId)
+    }
+
     /// Display labels for a meeting's speakers, keyed by speaker ID.
     static func labels(meetingId: String, db: Database) throws -> [String: String] {
         let speakers = try MeetingSpeaker

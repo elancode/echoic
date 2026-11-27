@@ -1,5 +1,8 @@
 import Foundation
 import AVFoundation
+import os.log
+
+private let audioFileLogger = Logger(subsystem: "com.echoic.app", category: "AudioFiles")
 
 /// Manages meeting audio files: segment storage and concatenation.
 /// Critical Rule #8: Segments flushed every 30s during recording.
@@ -54,22 +57,31 @@ enum AudioFileManager {
         }
 
         var currentTime = CMTime.zero
+        var joined = 0
 
         for segmentURL in segments {
-            let asset = AVURLAsset(url: segmentURL)
-            let duration = try await asset.load(.duration)
-            let tracks = try await asset.loadTracks(withMediaType: .audio)
-
-            guard let audioTrack = tracks.first else { continue }
-
-            try track.insertTimeRange(
-                CMTimeRange(start: .zero, duration: duration),
-                of: audioTrack,
-                at: currentTime
-            )
-
-            currentTime = CMTimeAdd(currentTime, duration)
+            // A segment that can't be read (typically the last one of a recording
+            // cut short by a crash or quit) is skipped: it costs at most 30 s of
+            // audio instead of the whole meeting.
+            do {
+                let asset = AVURLAsset(url: segmentURL)
+                let duration = try await asset.load(.duration)
+                let tracks = try await asset.loadTracks(withMediaType: .audio)
+                guard let audioTrack = tracks.first, duration > .zero else {
+                    audioFileLogger.warning("Skipping empty segment \(segmentURL.lastPathComponent, privacy: .public)")
+                    continue
+                }
+                try track.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: audioTrack, at: currentTime)
+                currentTime = CMTimeAdd(currentTime, duration)
+                joined += 1
+            } catch {
+                audioFileLogger.warning(
+                    "Skipping unreadable segment \(segmentURL.lastPathComponent, privacy: .public): \(error.localizedDescription)"
+                )
+            }
         }
+
+        guard joined > 0 else { throw AudioFileError.noReadableSegments }
 
         // Export as M4A
         guard let session = AVAssetExportSession(
@@ -134,8 +146,10 @@ enum AudioFileManager {
     }
 }
 
-enum AudioFileError: Error {
+enum AudioFileError: Error, Equatable {
     case compositionFailed
     case exportFailed
     case segmentNotFound
+    /// Every segment was unreadable, so there's no audio to join.
+    case noReadableSegments
 }

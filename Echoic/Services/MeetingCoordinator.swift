@@ -18,6 +18,16 @@ final class MeetingCoordinator: ObservableObject {
     @Published var liveSegments: [TranscriptSegment] = []
     @Published var errorMessage: String?
     @Published var recordingMode: RecordingMode = .systemAudio
+    /// Bookmarks added during the current recording, as offsets (ms) from the start.
+    @Published var bookmarks: [Int64] = []
+    var bookmarkCount: Int { bookmarks.count }
+    /// What the current recording is listening to, e.g. "Meeting audio + My microphone".
+    var activeSourcesDescription: String {
+        switch recordingMode {
+        case .microphone: return "My microphone"
+        case .systemAudio: return micTranscribedSeparately ? "Meeting audio + My microphone" : "Meeting audio"
+        }
+    }
     /// Latest recap, open concerns, and questions from the live insights agent.
     @Published var liveInsight: LiveInsight?
     @Published var liveInsightsStatus: LiveInsightsStatus = .disabled
@@ -52,6 +62,22 @@ final class MeetingCoordinator: ObservableObject {
         defaults.object(forKey: microphoneSettingKey) as? Bool ?? true
     }
 
+    /// UserDefaults key for the popover's "Meeting audio" source checkbox.
+    nonisolated static let meetingAudioSettingKey = "captureMeetingAudio"
+
+    /// Whether to capture system (meeting) audio (on by default).
+    nonisolated static func capturesMeetingAudio(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: meetingAudioSettingKey) as? Bool ?? true
+    }
+
+    /// Maps the two "Listening to" checkboxes to a capture mode. Meeting audio uses
+    /// ScreenCaptureKit (plus the mic as a "You" track when ticked); mic only
+    /// records the microphone as the primary input. Nil when neither is ticked.
+    nonisolated static func recordingMode(meetingAudio: Bool, microphone: Bool) -> RecordingMode? {
+        if meetingAudio { return .systemAudio }
+        return microphone ? .microphone : nil
+    }
+
     /// UserDefaults key for "Live insights during meetings" (Settings → Models).
     nonisolated static let liveInsightsSettingKey = "liveInsightsEnabled"
 
@@ -65,9 +91,41 @@ final class MeetingCoordinator: ObservableObject {
 
     // MARK: - Recording Flow
 
+    /// Starts or stops recording from a UI control (popover, Library "Record" button).
+    func toggleRecording() {
+        if state == .recording {
+            Task { await stopRecording() }
+        } else {
+            databaseWriter = DatabaseManager.shared.databaseWriter
+            Task { await startRecording() }
+        }
+    }
+
+    /// Marks the current moment in the recording.
+    func addBookmark() {
+        guard state == .recording, let meeting = currentMeeting, let db = databaseWriter else { return }
+        let offsetMs = Int64(Date().timeIntervalSince1970 * 1000) - meeting.startedAt
+        do {
+            try db.write { try MeetingAnnotations.addBookmark(meetingId: meeting.id, offsetMs: offsetMs, db: $0) }
+            bookmarks.append(offsetMs)
+        } catch {
+            logger.error("Failed to save bookmark: \(error.localizedDescription)")
+        }
+    }
+
     /// Starts a new recording session.
     func startRecording(enableMic: Bool = false) async {
         guard state == .idle || state.errorText != nil else { return }
+
+        guard let mode = Self.recordingMode(
+            meetingAudio: Self.capturesMeetingAudio(),
+            microphone: Self.transcribesMicrophone()
+        ) else {
+            state = .error("Choose at least one source to listen to.")
+            return
+        }
+        recordingMode = mode
+        bookmarks = []
 
         // Reset error state so we start clean
         if state.errorText != nil {
@@ -371,7 +429,7 @@ final class MeetingCoordinator: ObservableObject {
             liveInsightsStatus = .disabled
             return
         }
-        guard (try? KeychainService.retrieveAPIKey()) != nil else {
+        guard ClaudeProviders.isConfigured() else {
             liveInsightsStatus = .needsAPIKey
             return
         }
