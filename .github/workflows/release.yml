@@ -58,6 +58,7 @@ jobs:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
           xcodebuild -scheme Echoic \
+            -skipPackagePluginValidation \
             -configuration Release \
             -destination 'platform=macOS,arch=arm64' \
             -archivePath build/Echoic.xcarchive \
